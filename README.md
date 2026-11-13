@@ -170,7 +170,7 @@ zg = ZeroGrad(remote=True)             # reads ZEROGRAD_API_KEY; an API key alon
 cap = zg.create("churn", examples=history, target="churned")
 ```
 
-The platform adds what a team needs to run predictions in production: versions and promotion, scheduled
+The platform adds what a team needs to run predictions in production: managed GPU inference with SLAs, versions and promotion, scheduled
 championships on fresh history, batch pipelines from your bucket, monitoring, thresholds chosen by cost,
 Explain and Ask, and workspaces for teams. `zerograd.privacy` (`scan`, `drop_sensitive`, `Vault`) keeps
 personal data on your side before anything is sent. See [zerograd.dev](https://zerograd.dev).
