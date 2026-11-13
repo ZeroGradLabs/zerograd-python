@@ -1,6 +1,6 @@
 <h1 align="center">ZeroGrad</h1>
 
-<p align="center"><b>Predictions over your tabular data with open foundation models. Nothing to train.</b></p>
+<p align="center"><b>One Python interface to tabular foundation models.</b></p>
 
 <p align="center">
   <a href="https://pypi.org/project/zerograd/"><img alt="PyPI" src="https://img.shields.io/pypi/v/zerograd"></a>
@@ -9,11 +9,31 @@
   <a href="https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/quickstart.ipynb"><img alt="Open in Colab" src="https://colab.research.google.com/assets/colab-badge.svg"></a>
 </p>
 
-<p align="center"><img src="https://raw.githubusercontent.com/zerogradlabs/zerograd-python/main/docs/demo.gif" alt="A ZeroGrad championship in the terminal" width="760"></p>
+## Tabular foundation models
 
-ZeroGrad runs a **championship**: tabular foundation models (TabPFN, TabICL, Mitra, TabDPT) read your labeled
-history as context, every one is scored on the same holdout, and the best becomes your champion. Then you predict
-with it. No training loop, no hyperparameters, no feature engineering.
+The usual way to predict something from a table (churn, fraud, default, demand) is to train a model for that
+problem: pick an algorithm, tune it, validate it, retrain it when the data changes.
+
+Tabular foundation models work differently. They are pretrained once, on millions of synthetic datasets, to learn
+*in context*: you give them your labeled rows as context and they predict new rows in a single forward pass, with no
+training and no hyperparameters. On small and medium tables they are competitive with tuned gradient boosting.
+
+Several research groups have released them: TabPFN (Prior Labs), TabICL (Inria), Mitra (Amazon), TabDPT (Layer 6)
+and others. Each comes with its own package, checkpoints, preprocessing and license.
+
+## What ZeroGrad does
+
+ZeroGrad puts them behind one interface. The same two calls, `create` and `predict`, work with every model, on your
+machine or on the ZeroGrad platform. On top of that:
+
+* **A championship instead of a guess.** Which model is best depends on the data. ZeroGrad scores every model on the
+  same holdout of your rows and keeps the best one as the champion, with the comparison in a table.
+* **Licenses you can see.** Some models allow commercial use and some do not. `zerograd.list_models()` shows each
+  license and where the weights come from; non-commercial models stay off unless you enable them by name.
+* **Local or cloud, same code.** Locally, nothing leaves your machine. With `remote=True` the same capability runs on
+  the platform, with versions, scheduled championships, monitoring and batch pipelines.
+
+## Quickstart
 
 ```bash
 pip install zerograd
@@ -22,13 +42,16 @@ pip install zerograd
 ```python
 from zerograd import ZeroGrad
 
-zg = ZeroGrad()                                        # runs on your machine
+zg = ZeroGrad()                                        # local: runs on your machine
 cap = zg.create("churn", examples=history, target="churned")
 cap.evaluation                                         # every model on the same holdout; the champion is marked
-cap.predict(new_customers)                             # prediction, score, proba_<class>
+cap.predict(new_customers)                             # prediction, score and probability per class
 ```
 
-Open source under Apache 2.0. In local mode no data leaves your machine.
+<p align="center"><img src="https://raw.githubusercontent.com/zerogradlabs/zerograd-python/main/docs/demo.gif" alt="A ZeroGrad championship in the terminal" width="760"></p>
+
+Open source under Apache 2.0. Try it without installing anything in
+[Colab](https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/quickstart.ipynb).
 
 ## Install
 
@@ -39,8 +62,7 @@ pip install "zerograd[all]"           # adds Mitra-v2 and TabDPT
 
 Python 3.10+. A GPU helps but is not required: on CPU, histories up to a few thousand rows take seconds to
 minutes. Weights download from each model's official Hugging Face repository the first time you use it and
-are cached there (`HF_HOME`); ZeroGrad hosts none. Try it without installing anything in
-[Colab](https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/quickstart.ipynb).
+are cached there (`HF_HOME`); ZeroGrad hosts none.
 
 ## What models are there?
 
