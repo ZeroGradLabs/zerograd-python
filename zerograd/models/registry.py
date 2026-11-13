@@ -1,0 +1,217 @@
+"""The model registry: every foundation model the local engine can run, with its license.
+
+Each entry knows how to check that it can run (package installed), how to fit on a context, and what
+its license allows. Weights are never shipped with this package: every adapter downloads them from the
+author's official repository into your own Hugging Face cache, the first time you use the model.
+"""
+
+from __future__ import annotations
+
+import os
+import warnings
+from dataclasses import dataclass, field
+from typing import Callable, Protocol
+
+import numpy as np
+
+
+class FittedModel(Protocol):
+    def predict_proba(self, X: np.ndarray) -> np.ndarray: ...
+
+
+# Every task a registered model can do. `in_sdk`: this version of the SDK runs it today.
+TASKS: dict[str, dict] = {
+    "classification": {"display": "Classification", "in_sdk": True,
+                       "description": "Predict a category: binary (churn, fraud, default) or multiclass (up to 10 classes)."},
+    "regression": {"display": "Regression", "in_sdk": False,
+                   "description": "Predict a number (amount, demand, time). The models support it; the SDK does not run it yet."},
+    "imputation": {"display": "Imputation", "in_sdk": False,
+                   "description": "Fill in missing values from the rest of the row. Supported by some models; not in the SDK yet."},
+}
+
+
+class NonCommercialModelWarning(UserWarning):
+    """Shown every time a non-commercial model is enabled."""
+
+
+NONCOMMERCIAL_NOTICE = (
+    "{display} is a non-commercial model. Review its license before using it: {license_url}. "
+    "Its weights come from {source}, downloaded with your own account; ZeroGrad does not host, "
+    "redistribute or license them, and you are responsible for complying with the author's terms. "
+    "Not for production or any commercial use."
+)
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    name: str
+    display: str
+    family: str
+    license: str
+    license_url: str
+    source: str  # where the weights come from (the author's official repository)
+    commercial: bool
+    install: str  # the pip command that makes it available
+    fit_fn: Callable[[np.ndarray, np.ndarray, int, bool], FittedModel]
+    check_fn: Callable[[], str | None]
+    attribution: str | None = None
+    max_classes: int | None = None
+    notes: str = ""
+    default: bool = True  # commercial models: part of the default championship when installed
+    tasks: tuple[str, ...] = ("classification",)  # what the model itself can do (see TASKS)
+    on_platform: bool = False  # also runs on the ZeroGrad platform (remote=True)
+    acceptance: str | None = None  # a license you accept before the download, and where
+    weights_fn: Callable[[], list[tuple[str, str]]] | None = None  # (repo, file) on Hugging Face, for the downloader
+    extra: dict = field(default_factory=dict)
+
+    def unavailable_reason(self) -> str | None:
+        return self.check_fn()
+
+    @property
+    def available(self) -> bool:
+        return self.unavailable_reason() is None
+
+    def fit(self, X: np.ndarray, y: np.ndarray, n_classes: int, serving: bool = False) -> FittedModel:
+        """serving=True keeps the encoded context (KV cache) where the model supports it: faster repeated predicts."""
+        return self.fit_fn(X, y, n_classes, serving)
+
+    def describe(self) -> dict:
+        reason = self.unavailable_reason()
+        return {
+            "name": self.name,
+            "display": self.display,
+            "family": self.family,
+            "commercial_use": "yes" if self.commercial else "no",
+            "tasks": list(self.tasks),
+            "remote": self.on_platform,
+            "license_acceptance": self.acceptance,
+            "license": self.license,
+            "license_url": self.license_url,
+            "weights": self.source,
+            "attribution": self.attribution,
+            "available": reason is None,
+            "unavailable_reason": reason,
+            "install": self.install,
+        }
+
+
+_REGISTRY: dict[str, ModelSpec] = {}
+
+
+def register_model(spec: ModelSpec, *, replace: bool = False) -> ModelSpec:
+    """Add a model to the registry (your own, or an adapter we do not ship). Returns the spec."""
+    if spec.name in _REGISTRY and not replace:
+        raise ValueError(f"A model named '{spec.name}' is already registered; pass replace=True to override it.")
+    _REGISTRY[spec.name] = spec
+    return spec
+
+
+def unregister_model(name: str) -> None:
+    _REGISTRY.pop(name, None)
+
+
+def get_model(name: str) -> ModelSpec:
+    try:
+        return _REGISTRY[name]
+    except KeyError:
+        raise ValueError(f"Unknown model '{name}'. Known models: {', '.join(_REGISTRY)}.") from None
+
+
+def all_models() -> list[ModelSpec]:
+    return list(_REGISTRY.values())
+
+
+def resolve_models(models: list[str] | None, noncommercial: list[str] | tuple[str, ...] | bool = ()) -> list[ModelSpec]:
+    """Which models a championship runs.
+
+    `models=None` means every default commercial model that is installed. Non-commercial models only run when
+    named in `noncommercial` (a list of names, not a blanket switch) and each one shows its license notice.
+    """
+    if noncommercial is True:
+        raise ValueError(
+            "Name the non-commercial models you want, e.g. noncommercial=['tabpfn-2.5']. "
+            "Each has its own license; there is no switch that turns them all on."
+        )
+    allowed_nc = set(noncommercial or ())
+    for name in allowed_nc:
+        spec = get_model(name)
+        if spec.commercial:
+            raise ValueError(f"'{name}' is a commercial-use model; list it in models=, not noncommercial=.")
+
+    if models is None:
+        chosen = [m for m in _REGISTRY.values() if m.commercial and m.default and m.available]
+        chosen += [get_model(n) for n in allowed_nc]
+    else:
+        chosen = [get_model(n) for n in models]
+        for spec in chosen:
+            if not spec.commercial and spec.name not in allowed_nc:
+                raise PermissionError(
+                    f"'{spec.name}' is a non-commercial model and is off by default. To use it for research or "
+                    f"evaluation, enable it explicitly with noncommercial=['{spec.name}'] after reviewing its "
+                    f"license: {spec.license_url}"
+                )
+        chosen += [get_model(n) for n in allowed_nc if n not in {s.name for s in chosen}]
+
+    for spec in chosen:
+        if not spec.commercial:
+            warn_noncommercial(spec)
+    return chosen
+
+
+def warn_noncommercial(spec: ModelSpec) -> None:
+    warnings.warn(
+        NONCOMMERCIAL_NOTICE.format(display=spec.display, license_url=spec.license_url, source=spec.source),
+        NonCommercialModelWarning,
+        stacklevel=4,
+    )
+
+
+# ---------------------------------------------------------------- shared helpers for adapters
+class Aligned:
+    """Wraps a classifier so predict_proba always returns every class 0..n_classes-1, in order."""
+
+    def __init__(self, model, n_classes: int, seen: list[int] | None = None, predict: Callable | None = None):
+        self.model = model
+        self.n_classes = n_classes
+        self._predict = predict or model.predict_proba
+        if seen is None:
+            seen = [int(c) for c in getattr(model, "classes_", range(n_classes))]
+        self.seen = seen
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        proba = np.asarray(self._predict(X), dtype=np.float64)
+        if self.seen == list(range(self.n_classes)) and proba.shape[1] == self.n_classes:
+            return proba
+        out = np.zeros((len(X), self.n_classes))
+        out[:, self.seen] = proba[:, : len(self.seen)]
+        return out
+
+
+def device() -> str:
+    forced = os.environ.get("ZEROGRAD_DEVICE")
+    if forced:
+        return forced
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"  # Apple GPUs: ZEROGRAD_DEVICE=mps
+    except ImportError:
+        return "cpu"
+
+
+def missing(*modules: str) -> Callable[[], str | None]:
+    """A check that passes when every module imports."""
+
+    def check() -> str | None:
+        import importlib.util
+
+        for mod in modules:
+            try:
+                found = importlib.util.find_spec(mod) is not None
+            except ModuleNotFoundError:  # a dotted name whose parent package is missing
+                found = False
+            if not found:
+                return f"the {mod} package is not installed"
+        return None
+
+    return check

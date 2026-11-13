@@ -1,0 +1,20 @@
+ZeroGrad Python SDK
+Copyright 2026 ZeroGrad
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This package contains no model weights. When you use the local engine, each model's weights are
+downloaded by you, from the author's official repository, under the author's license. The licenses
+of the models the SDK can run are listed in MODELS.md and by `zerograd.list_models()`.
+
+Built with PriorLabs-TabPFN
+  The "tabpfn-v2" model uses TabPFN v2 by Prior Labs, under the Prior Labs License v1.0
+  (Apache 2.0 with an attribution requirement):
+  https://huggingface.co/Prior-Labs/TabPFN-v2-clf/blob/main/LICENSE.txt
+  If you build a product or service with it, the license asks you to display
+  "Built with PriorLabs-TabPFN" prominently on the related website, user interface or documentation.
+
+Other models (code and weights are theirs, not part of this package):
+  TabICL / TabICLv2   BSD-3-Clause, Inria (soda-inria/tabicl)
+  Mitra, Mitra-v2     Apache 2.0, Amazon (autogluon)
+  TabDPT              Apache 2.0, Layer 6

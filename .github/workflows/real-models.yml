@@ -1,0 +1,21 @@
+name: Real models
+
+# Weekly and on demand: install the models, download their weights from Hugging Face, run a small championship.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv venv --python 3.12
+      - run: uv pip install -e ".[all,dev]" --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
+      - run: uv run pytest -q tests/test_real_models.py
+        env:
+          ZEROGRAD_REAL_MODELS: "1"
+          ZEROGRAD_QUIET: "1"

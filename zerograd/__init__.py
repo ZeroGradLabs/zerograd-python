@@ -1,0 +1,36 @@
+"""ZeroGrad: predictions over your tabular data with foundation models. Nothing to train.
+
+    from zerograd import ZeroGrad
+    zg = ZeroGrad()                                   # local, on your machine
+    cap = zg.create("titanic-survival", examples=train_df, target="Survived")
+    cap.evaluation                                    # every model on the same holdout
+    cap.predict(new_df)
+
+    zg = ZeroGrad(remote=True)                        # the ZeroGrad platform (ZEROGRAD_API_KEY)
+"""
+
+from ._remote import Capability, Pipeline, RemoteZeroGrad, Run
+from ._version import __version__
+from .client import ZeroGrad
+from .errors import (
+    APIError,
+    AuthError,
+    LimitError,
+    NotFoundError,
+    RunFailedError,
+    UsageWarning,
+    ValidationError,
+    ZeroGradError,
+)
+from .local import LocalCapability, LocalZeroGrad, load
+from .models import LicenseGuardError, NonCommercialModelWarning, list_models, list_tasks, model_info, register_model
+from .privacy import SensitiveDataWarning, Vault, drop_sensitive, scan
+
+__all__ = [
+    "ZeroGrad", "LocalZeroGrad", "RemoteZeroGrad", "LocalCapability", "Capability", "Run", "Pipeline", "load",
+    "list_models", "list_tasks", "model_info", "register_model", "NonCommercialModelWarning", "LicenseGuardError",
+    "ZeroGradError", "AuthError", "NotFoundError", "ValidationError", "LimitError",
+    "RunFailedError", "APIError", "UsageWarning",
+    "Vault", "scan", "drop_sensitive", "SensitiveDataWarning",
+    "__version__",
+]
