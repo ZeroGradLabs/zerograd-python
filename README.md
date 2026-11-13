@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/zerogradlabs/zerograd-python/main/docs/banner-dark.gif">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/zerogradlabs/zerograd-python/main/docs/banner-light.gif">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.gif">
+    <source media="(prefers-color-scheme: light)" srcset="docs/banner-light.gif">
     <img alt="ZeroGrad: one Python interface to tabular foundation models" src="https://raw.githubusercontent.com/zerogradlabs/zerograd-python/main/docs/banner-light.gif" width="100%">
   </picture>
 </p>
