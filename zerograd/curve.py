@@ -121,11 +121,14 @@ class ContextCurve(pd.DataFrame):
         return text + "."
 
     # ------------------------------------------------------------------ showing it
-    def plot(self, ax: Any = None, *, title: str | None = None):
+    def plot(self, ax: Any = None, *, title: str | None = None, **kwargs: Any):
         """Score (left axis) and prediction latency (right axis) against context rows; the pick is marked.
 
         Needs matplotlib (`pip install matplotlib`, already in Colab and Jupyter setups). Returns the axes.
+        Any other keyword (y=, kind=, ylim=, ...) draws pandas' regular DataFrame.plot instead.
         """
+        if kwargs:
+            return pd.DataFrame(self).plot(ax=ax, title=title, **kwargs)
         try:
             import matplotlib.pyplot as plt
             from matplotlib.ticker import FuncFormatter

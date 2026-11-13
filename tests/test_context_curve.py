@@ -82,3 +82,9 @@ def test_plot_marks_the_recommended_size(zg):
     assert any(t.startswith("recommended:") for t in texts)
     assert ax.get_xscale() == "log"
     assert len(ax.figure.axes) == 2  # score and latency on two axes
+
+
+def test_plot_with_pandas_keywords_falls_back_to_dataframe_plot(zg):
+    curve = zg.context_curve(titanic_like(400), "Survived", sizes=[40, 160])
+    ax = curve.plot(y="roc_auc", marker="o", ylim=(0.5, 1), title="ROC AUC")
+    assert ax.get_title() == "ROC AUC" and ax.get_ylim() == (0.5, 1)
