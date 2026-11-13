@@ -43,8 +43,8 @@ dev = ["pytest>=8", "ruff>=0.6"]
 [project.urls]
 Homepage = "https://zerograd.dev"
 Documentation = "https://zerograd.dev/docs"
-Source = "https://github.com/zerogradlab/zerograd-python"
-Issues = "https://github.com/zerogradlab/zerograd-python/issues"
+Source = "https://github.com/zerogradlabs/zerograd-python"
+Issues = "https://github.com/zerogradlabs/zerograd-python/issues"
 
 [build-system]
 requires = ["hatchling>=1.27"]
@@ -57,7 +57,7 @@ path = "zerograd/_version.py"
 packages = ["zerograd"]
 
 [tool.hatch.build.targets.sdist]
-include = ["zerograd", "tests", "README.md", "LICENSE", "NOTICE", "TERMS.md", "MODELS.md", "CHANGELOG.md"]
+include = ["zerograd", "tests", "README.md", "LICENSE", "NOTICE", "TERMS.md", "MODELS.md", "CHANGELOG.md", "SECURITY.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

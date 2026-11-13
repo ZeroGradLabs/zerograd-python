@@ -4,12 +4,12 @@
 
 <p align="center">
   <a href="https://pypi.org/project/zerograd/"><img alt="PyPI" src="https://img.shields.io/pypi/v/zerograd"></a>
-  <a href="https://github.com/zerogradlab/zerograd-python/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zerogradlab/zerograd-python/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/zerogradlabs/zerograd-python/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zerogradlabs/zerograd-python/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue"></a>
-  <a href="https://colab.research.google.com/github/zerogradlab/zerograd-python/blob/main/examples/quickstart.ipynb"><img alt="Open in Colab" src="https://colab.research.google.com/assets/colab-badge.svg"></a>
+  <a href="https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/quickstart.ipynb"><img alt="Open in Colab" src="https://colab.research.google.com/assets/colab-badge.svg"></a>
 </p>
 
-<p align="center"><img src="https://raw.githubusercontent.com/zerogradlab/zerograd-python/main/docs/demo.gif" alt="A ZeroGrad championship in the terminal" width="760"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/zerogradlabs/zerograd-python/main/docs/demo.gif" alt="A ZeroGrad championship in the terminal" width="760"></p>
 
 ZeroGrad runs a **championship**: tabular foundation models (TabPFN, TabICL, Mitra, TabDPT) read your labeled
 history as context, every one is scored on the same holdout, and the best becomes your champion. Then you predict
@@ -40,7 +40,7 @@ pip install "zerograd[all]"           # adds Mitra-v2 and TabDPT
 Python 3.10+. A GPU helps but is not required: on CPU, histories up to a few thousand rows take seconds to
 minutes. Weights download from each model's official Hugging Face repository the first time you use it and
 are cached there (`HF_HOME`); ZeroGrad hosts none. Try it without installing anything in
-[Colab](https://colab.research.google.com/github/zerogradlab/zerograd-python/blob/main/examples/quickstart.ipynb).
+[Colab](https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/quickstart.ipynb).
 
 ## What models are there?
 

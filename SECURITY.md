@@ -2,8 +2,8 @@
 
 ## Reporting a vulnerability
 
-Please do not open a public issue. Email **security@zerograd.dev** with what you found, how to reproduce it and
-what it affects. We answer within 2 business days and keep you posted until it is fixed. If you want credit in
+Please do not open a public issue. Email **lucasargento7@gmail.com** (subject: "zerograd security") with what you found, how to reproduce it and
+what it affects, or use *Report a vulnerability* in the repository's Security tab. We answer within 2 business days and keep you posted until it is fixed. If you want credit in
 the release notes, say so.
 
 ## What the SDK does with your data
