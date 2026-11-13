@@ -40,7 +40,10 @@ def test_renders_in_terminal_and_notebook():
 def test_tasks():
     tasks = zerograd.list_tasks()
     assert tasks.names() == ["classification", "regression", "imputation"]
-    assert tasks["classification"]["in_sdk"] and not tasks["regression"]["in_sdk"]
+    assert tasks["classification"]["in_sdk"] and tasks["regression"]["in_sdk"] and not tasks["imputation"]["in_sdk"]
+    assert {"tabpfn-v2", "tabicl-v2", "tabdpt"} <= set(tasks["regression"]["sdk_models"])
+    assert "mitra-v2" in tasks["regression"]["commercial_models"] and "mitra-v2" not in tasks["regression"]["sdk_models"]
+    assert zerograd.model_info("mitra-v2")["runs_in_sdk"] == ["classification"]
     assert "tabpfn-v2" in tasks["classification"]["commercial_models"]
     assert "limix-2" in tasks["imputation"]["noncommercial_models"]
     assert "<table" in tasks._repr_html_() and "classification" in repr(tasks)

@@ -57,6 +57,16 @@ PHRASES: dict[str, tuple[str, ...]] = {
 }
 
 
+def fmt_value(v: float) -> str:
+    """A metric for people: 0.931 for scores, 12.4 or 34,567 for errors in the target's unit."""
+    v = float(v)
+    if abs(v) >= 1000:
+        return f"{v:,.0f}"
+    if abs(v) >= 100:
+        return f"{v:.1f}"
+    return f"{v:.3f}"
+
+
 def phrase(moment: str) -> str:
     return random.choice(PHRASES[moment])
 
@@ -176,15 +186,17 @@ class Console:
         return f"  {label} {bar} {right}"
 
     def podium(self, rows: list[tuple[str, float | None, str | None]], metric_label: str, attribution: str | None,
-               baseline: float | None = None) -> None:
-        """rows: (display, value, error), best first."""
+               baseline: float | None = None, *, higher_is_better: bool = True,
+               baseline_label: str = "majority class") -> None:
+        """rows: (display, value, error), best first. Lower-is-better metrics (RMSE) get the longest bar at the lowest."""
         if not self.enabled:
             return
         ok = [r for r in rows if r[2] is None and r[1] is not None]
         if not ok:
             return
-        top = max(v for _, v, _ in ok)
-        low = min([v for _, v, _ in ok] + ([baseline] if baseline is not None else []))
+        sign = 1.0 if higher_is_better else -1.0
+        top = max(sign * v for _, v, _ in ok)
+        low = min([sign * v for _, v, _ in ok] + ([sign * baseline] if baseline is not None else []))
         span = max(top - low, 1e-9)
         name_w = max(len(r[0]) for r in rows)
         self.say("")
@@ -196,17 +208,17 @@ class Console:
             if value is None:
                 self.say(f"  {medal} {name:<{name_w}}  {self.dim('n/a')}")
                 continue
-            width = 4 + int(round(20 * (value - low) / span)) if len(ok) > 1 else 24
+            width = 4 + int(round(20 * (sign * value - low) / span)) if len(ok) > 1 else 24
             bar = (self.accent if i == 0 else self.dim)("█" * width)
             label = self.bold(f"{name:<{name_w}}") if i == 0 else f"{name:<{name_w}}"
-            self.say(f"  {medal} {label}  {bar} {value:.3f}")
+            self.say(f"  {medal} {label}  {bar} {fmt_value(value)}")
         if baseline is not None:
             label = "without a model".ljust(name_w)
-            self.say("     " + self.dim(f"{label}  {baseline:.3f}  ({metric_label}, majority class)"))
+            self.say("     " + self.dim(f"{label}  {fmt_value(baseline)}  ({metric_label}, {baseline_label})"))
         champ = ok[0][0] if rows and rows[0][2] is None else None
         if champ:
             self.say("")
-            self.say(f"{self.accent('◆')} {self.bold('Champion:')} {champ} · {metric_label} {rows[0][1]:.3f}"
+            self.say(f"{self.accent('◆')} {self.bold('Champion:')} {champ} · {metric_label} {fmt_value(rows[0][1])}"
                      + (f" {self.dim('· ' + attribution)}" if attribution else ""))
 
 

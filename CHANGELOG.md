@@ -10,6 +10,10 @@ First open source release, Apache 2.0. `pip install zerograd` includes the local
 * **Models.** Commercial use, on by default when installed: TabPFN v2, TabICLv2, Mitra-v2, TabDPT (and Mitra v1
   by name). Non-commercial, off by default and only by name: TabPFN 2.5 / 2.6 / 3 / 3.5, TabFM, EXAONE Tabular,
   LimiX-2. Weights download from each author's repository; nothing is hosted by ZeroGrad.
+* **Regression.** A numeric target runs a regression championship (TabPFN v2, TabICLv2, TabDPT; TabPFN 2.5+ by
+  name, non-commercial): RMSE (default), MAE and R² on a holdout stratified on deciles of the target, average and
+  median baselines, `predict` with one `prediction` column, save and load, context curves with a relative tolerance.
+  `task="regression"` or `task="classification"` overrides the detection. Local only for now.
 * **Catalog.** `zerograd.list_models(task=..., commercial=...)` and `zerograd.list_tasks()`, as tables in
   notebooks and terminals, from the same registry the license guards use.
 * **Bring your own model** with `zerograd.register_model`.

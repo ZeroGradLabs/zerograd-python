@@ -26,3 +26,22 @@ def test_commercial_model_learns(name, monkeypatch):
     assert ev.iloc[0]["roc_auc"] > 0.7
     preds = cap.predict(df.iloc[240:].drop(columns="Survived"))
     assert len(preds) == 60 and preds["score"].between(0, 1).all()
+
+
+@pytest.mark.parametrize("name", [m["name"] for m in zerograd.list_models(task="regression", commercial=True)
+                                  if "regression" in m["runs_in_sdk"]])
+def test_commercial_model_regresses(name, monkeypatch):
+    from conftest import houses_like
+
+    monkeypatch.delenv("ZEROGRAD_API_KEY", raising=False)
+    if not zerograd.model_info(name)["installed"]:
+        pytest.skip(f"{name} is not installed")
+    df = houses_like(300)
+    zg = zerograd.ZeroGrad(models=[name], progress=False)
+    cap = zg.create(name, examples=df.iloc[:240], target="price")
+    ev = cap.evaluation
+    assert "error" not in ev or ev["error"].isna().all(), ev
+    assert cap.task == "regression" and ev.iloc[0]["r2"] > 0.6, ev
+    assert ev.iloc[0]["rmse"] < cap.baselines.loc["Always the average", "rmse"]
+    preds = cap.predict(df.iloc[240:].drop(columns="price"))
+    assert len(preds) == 60 and preds["prediction"].notna().all()

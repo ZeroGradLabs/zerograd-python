@@ -53,12 +53,12 @@ class RemoteZeroGrad:
     # ------------------------------------------------------------------ capabilities
     def create(self, name: str, examples: Table, target: str, *, drop: Iterable[str] | None = None,
                metric: str | None = None, wait: bool = True, sensitive: str = "drop", keep: Iterable[str] = (),
-               vault: Vault | None = None) -> "Capability | Run":
+               vault: Vault | None = None, task: str | None = None) -> "Capability | Run":
         """Create a capability (or a new version of `name`) from labeled history and run the championship.
 
         `examples` is a DataFrame, a CSV/Parquet path, a gs:// URI or an upload id.
         `metric` picks the champion: roc_auc (default), pr_auc, log_loss, accuracy, balanced_accuracy,
-        f1, precision or recall (binary), f1_macro (multiclass).
+        f1, precision or recall (binary), f1_macro (multiclass). `task="regression"` runs locally only, for now.
         Waits with a progress bar and returns the Capability; with wait=False returns the Run.
 
         Privacy, on your machine before upload (local tables only, not gs:// or upload ids):
@@ -66,6 +66,10 @@ class RemoteZeroGrad:
         "warn" only warns, "keep" skips the check; `keep=[...]` exempts columns. `vault=Vault(key)` sends
         keyed tokens instead of your column names, categories, numbers and labels.
         """
+        if task not in (None, "classification"):
+            raise ValidationError(
+                f"The platform runs classification in this version; {task} runs locally: ZeroGrad(remote=False)"
+                f".create(..., task={task!r}).", code="unsupported_task")
         drop = list(drop or [])
         examples = _protect(examples, sensitive, keep=[target, *keep], vault=vault, target=target)
         if vault is not None:

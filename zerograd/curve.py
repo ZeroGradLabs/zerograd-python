@@ -20,14 +20,17 @@ from typing import Any, Iterable
 import pandas as pd
 
 DEFAULT_SIZES = (250, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000)
-DEFAULT_TOLERANCE = 0.005
+DEFAULT_TOLERANCE = 0.005  # absolute, for scores between 0 and 1
+RELATIVE_TOLERANCE = 0.005  # errors in the target's own unit (RMSE, MAE): within 0.5% of the best
 
 # name -> (label, higher is better); the same names as the championship metrics
 _LABELS = {
     "roc_auc": ("ROC AUC", True), "pr_auc": ("PR AUC", True), "log_loss": ("Log loss", False),
     "accuracy": ("Accuracy", True), "balanced_accuracy": ("Balanced accuracy", True), "f1": ("F1", True),
     "precision": ("Precision", True), "recall": ("Recall", True), "f1_macro": ("F1 (macro)", True),
+    "rmse": ("RMSE", False), "mae": ("MAE", False), "r2": ("R²", True),
 }
+_RELATIVE = {"rmse", "mae"}  # unbounded, in the target's unit: tolerance is a share of the best value
 _ACCENT = "#6c63ff"  # ZeroGrad violet
 _MUTED = "#8a8f87"
 
@@ -53,13 +56,14 @@ def check_sizes(sizes: Iterable[int] | None, available: int, cap: int | None = N
 
 
 def recommend(values: Iterable[float | None], sizes: Iterable[int], *, higher_is_better: bool = True,
-              tolerance: float = DEFAULT_TOLERANCE) -> int | None:
-    """The smallest size whose value is within `tolerance` (absolute) of the best one."""
+              tolerance: float = DEFAULT_TOLERANCE, relative: bool = False) -> int | None:
+    """The smallest size whose value is within `tolerance` of the best one (absolute, or a share of the best)."""
     pairs = [(int(s), float(v)) for s, v in zip(sizes, values) if v is not None and not _isnan(v)]
     if not pairs:
         return None
     best = max(v for _, v in pairs) if higher_is_better else min(v for _, v in pairs)
-    ok = [s for s, v in pairs if (best - v if higher_is_better else v - best) <= tolerance + 1e-12]
+    room = tolerance * abs(best) if relative else tolerance
+    ok = [s for s, v in pairs if (best - v if higher_is_better else v - best) <= room + 1e-12]
     return min(ok)
 
 
@@ -76,8 +80,11 @@ class ContextCurve(pd.DataFrame):
         return pd.DataFrame
 
     @classmethod
-    def build(cls, rows: list[dict], *, metric: str, tolerance: float = DEFAULT_TOLERANCE,
+    def build(cls, rows: list[dict], *, metric: str, tolerance: float | None = None,
               model: str | None = None) -> "ContextCurve":
+        """`tolerance` None: 0.005 absolute, or 0.5% of the best for RMSE and MAE."""
+        if tolerance is None:
+            tolerance = RELATIVE_TOLERANCE if metric in _RELATIVE else DEFAULT_TOLERANCE
         df = pd.DataFrame(rows)
         if len(df):
             df = df.set_index("rows").sort_index()
@@ -98,12 +105,17 @@ class ContextCurve(pd.DataFrame):
         return _LABELS.get(self.metric, (self.metric, True))[1]
 
     @property
+    def relative(self) -> bool:
+        """True when `tolerance` is a share of the best value (RMSE, MAE) rather than an absolute difference."""
+        return self.metric in _RELATIVE
+
+    @property
     def recommended(self) -> int | None:
         """The smallest context within `tolerance` of the best score."""
         if self.metric not in self:
             return None
         rec = recommend(self[self.metric].tolist(), self.index.tolist(), higher_is_better=self.higher_is_better,
-                        tolerance=self.tolerance)
+                        tolerance=self.tolerance, relative=self.relative)
         return int(rec) if rec is not None else None
 
     def summary(self) -> str:
@@ -112,8 +124,9 @@ class ContextCurve(pd.DataFrame):
             return "No size produced a score."
         best_rows = self[self.metric].idxmax() if self.higher_is_better else self[self.metric].idxmin()
         best, got = self.loc[best_rows, self.metric], self.loc[rec, self.metric]
-        text = (f"{rec:,} rows of context score {self.metric_label} {got:.3f}, "
-                f"within {self.tolerance:g} of the best ({best:.3f} with {int(best_rows):,} rows)")
+        within = f"{self.tolerance:.1%}".replace(".0%", "%") if self.relative else f"{self.tolerance:g}"
+        text = (f"{rec:,} rows of context score {self.metric_label} {_fmt(got)}, "
+                f"within {within} of the best ({_fmt(best)} with {int(best_rows):,} rows)")
         if "ms_per_row" in self and rec != best_rows:
             fast, slow = self.loc[rec, "ms_per_row"], self.loc[best_rows, "ms_per_row"]
             if fast > 0 and slow > 0:
@@ -190,6 +203,15 @@ class ContextCurve(pd.DataFrame):
         return head + styler.to_html()
 
 
+def _fmt(v: float) -> str:
+    v = float(v)
+    if abs(v) >= 1000:
+        return f"{v:,.0f}"
+    if abs(v) >= 100:
+        return f"{v:.1f}"
+    return f"{v:.3f}"
+
+
 def _short(v: float) -> str:
     v = int(round(v))
     if v >= 1000 and v % 1000 == 0:
@@ -214,4 +236,4 @@ def ms_per_row(seconds: float, n: int) -> float:
     return float(seconds * 1000 / max(1, n))
 
 
-__all__ = ["ContextCurve", "recommend", "default_sizes", "check_sizes", "DEFAULT_TOLERANCE"]
+__all__ = ["ContextCurve", "recommend", "default_sizes", "check_sizes", "DEFAULT_TOLERANCE", "RELATIVE_TOLERANCE"]

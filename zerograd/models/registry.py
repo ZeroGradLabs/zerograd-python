@@ -19,12 +19,16 @@ class FittedModel(Protocol):
     def predict_proba(self, X: np.ndarray) -> np.ndarray: ...
 
 
+class FittedRegressor(Protocol):
+    def predict(self, X: np.ndarray) -> np.ndarray: ...
+
+
 # Every task a registered model can do. `in_sdk`: this version of the SDK runs it today.
 TASKS: dict[str, dict] = {
     "classification": {"display": "Classification", "in_sdk": True,
                        "description": "Predict a category: binary (churn, fraud, default) or multiclass (up to 10 classes)."},
-    "regression": {"display": "Regression", "in_sdk": False,
-                   "description": "Predict a number (amount, demand, time). The models support it; the SDK does not run it yet."},
+    "regression": {"display": "Regression", "in_sdk": True,
+                   "description": "Predict a number (amount, price, demand, time). Runs locally in this version."},
     "imputation": {"display": "Imputation", "in_sdk": False,
                    "description": "Fill in missing values from the rest of the row. Supported by some models; not in the SDK yet."},
 }
@@ -63,6 +67,23 @@ class ModelSpec:
     acceptance: str | None = None  # a license you accept before the download, and where
     weights_fn: Callable[[], list[tuple[str, str]]] | None = None  # (repo, file) on Hugging Face, for the downloader
     extra: dict = field(default_factory=dict)
+    # Regression: (X, y float, serving) -> a model with predict(X) -> one number per row. None: not in the SDK yet.
+    regress_fn: Callable[[np.ndarray, np.ndarray, bool], FittedRegressor] | None = None
+    regression_weights_fn: Callable[[], list[tuple[str, str]]] | None = None
+
+    @property
+    def sdk_tasks(self) -> tuple[str, ...]:
+        """The tasks this version of the SDK runs with this model (a subset of `tasks`)."""
+        return tuple(t for t in ("classification", "regression")
+                     if (t == "classification" and self.fit_fn is not None) or (t == "regression" and self.regress_fn))
+
+    def runs(self, task: str) -> bool:
+        """task: "classification", "regression", or a capability's task ("binary", "multiclass", "regression")."""
+        return ("classification" if task in ("binary", "multiclass") else task) in self.sdk_tasks
+
+    def weights_for(self, task: str) -> list[tuple[str, str]]:
+        fn = self.regression_weights_fn if task == "regression" else self.weights_fn
+        return fn() if fn is not None else []
 
     def unavailable_reason(self) -> str | None:
         return self.check_fn()
@@ -75,6 +96,12 @@ class ModelSpec:
         """serving=True keeps the encoded context (KV cache) where the model supports it: faster repeated predicts."""
         return self.fit_fn(X, y, n_classes, serving)
 
+    def fit_regressor(self, X: np.ndarray, y: np.ndarray, serving: bool = False) -> FittedRegressor:
+        """Fit on a numeric target. predict(X) returns one float per row."""
+        if self.regress_fn is None:
+            raise NotImplementedError(f"{self.display} does not run regression in this version of the SDK")
+        return Point(self.regress_fn(X, np.asarray(y, dtype=np.float64), serving))
+
     def describe(self) -> dict:
         reason = self.unavailable_reason()
         return {
@@ -83,6 +110,7 @@ class ModelSpec:
             "family": self.family,
             "commercial_use": "yes" if self.commercial else "no",
             "tasks": list(self.tasks),
+            "runs_in_sdk": list(self.sdk_tasks),
             "remote": self.on_platform,
             "license_acceptance": self.acceptance,
             "license": self.license,
@@ -185,6 +213,17 @@ class Aligned:
         out = np.zeros((len(X), self.n_classes))
         out[:, self.seen] = proba[:, : len(self.seen)]
         return out
+
+
+class Point:
+    """Wraps a regressor so predict always returns a flat float64 array, one value per row."""
+
+    def __init__(self, model, predict: Callable | None = None):
+        self.model = model
+        self._predict = predict or model.predict
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        return np.asarray(self._predict(X), dtype=np.float64).reshape(-1)
 
 
 def device() -> str:

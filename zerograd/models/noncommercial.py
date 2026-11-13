@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .registry import Aligned, FittedModel, ModelSpec, device, missing, register_model
+from .registry import Aligned, FittedModel, FittedRegressor, ModelSpec, Point, device, missing, register_model
 
 _NC = "Not for production or commercial use."
 
@@ -42,6 +42,22 @@ def _tabpfn_version_fit(version_name: str):
         return Aligned(model, n_classes)
 
     return fit
+
+
+def _tabpfn_version_regress(version_name: str):
+    def regress(X: np.ndarray, y: np.ndarray, serving: bool) -> FittedRegressor:
+        os.environ.setdefault("TABPFN_ALLOW_CPU_LARGE_DATASET", "1")
+        from tabpfn import TabPFNRegressor
+        from tabpfn.constants import ModelVersion
+
+        model = TabPFNRegressor.create_default_for_version(
+            getattr(ModelVersion, version_name), device=device(), random_state=0,
+            fit_mode="fit_with_cache" if serving else "fit_preprocessors",
+        )
+        model.fit(X, y)
+        return Point(model)
+
+    return regress
 
 
 def _tabpfn_version_check(version_name: str):
@@ -81,6 +97,7 @@ for _name, _display, _version, _repo in (
         tasks=("classification", "regression"),
         acceptance="Prior Labs license, accepted in the browser on first download (Prior Labs account)",
         fit_fn=_tabpfn_version_fit(_version),
+        regress_fn=_tabpfn_version_regress(_version),
         check_fn=_tabpfn_version_check(_version),
     ))
 
