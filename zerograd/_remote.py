@@ -11,6 +11,7 @@ import pandas as pd
 
 from ._http import Transport
 from ._progress import Bar
+from .curve import ContextCurve
 from .errors import RunFailedError, ValidationError, ZeroGradError
 from .privacy import Vault, drop_sensitive
 
@@ -121,11 +122,12 @@ class RemoteZeroGrad:
         return self._t.request("GET", "/v1/usage")
 
     def context_curve(self, examples: pd.DataFrame, target: str, sizes: Iterable[int], test: pd.DataFrame,
-                      *, name: str = "context-curve", seed: int = 0) -> pd.DataFrame:
+                      *, name: str = "context-curve", seed: int = 0) -> ContextCurve:
         """How quality grows with history: a championship per size, each scored on the same `test` rows.
 
-        Creates a temporary capability per size and deletes it afterwards. Returns one row per size,
-        indexed by rows, with the champion, ROC AUC and accuracy measured here on `test`.
+        Creates a temporary capability per size and deletes it afterwards. Returns a ContextCurve: one row per
+        size, indexed by rows, with the champion, ROC AUC and accuracy measured here on `test`, plus
+        `recommended` and `plot()`.
         """
         y_true = test[target]
         features = test.drop(columns=[target])
@@ -146,7 +148,7 @@ class RemoteZeroGrad:
                 cap.delete()
         if self.progress:
             _say("✓ " + " · ".join(f"{r['rows']} rows: AUC {r['roc_auc']:.3f}" for r in rows if r["roc_auc"] is not None))
-        return pd.DataFrame(rows).set_index("rows")
+        return ContextCurve.build(rows, metric="roc_auc")
 
     # ------------------------------------------------------------------ uploads
     def upload(self, data: bytes, filename: str) -> str:

@@ -1,0 +1,22 @@
+name: Docs assets
+
+# On demand: figures for the README and zerograd.dev/docs that need real models (downloads from Hugging Face).
+on:
+  workflow_dispatch:
+
+jobs:
+  context-curve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv venv --python 3.12
+      - run: uv pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
+      - run: uv run python scripts/context_curve_figure.py | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: context-curve
+          path: |
+            docs/context-curve.png
+            docs/context-curve.csv

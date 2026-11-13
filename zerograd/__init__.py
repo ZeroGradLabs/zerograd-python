@@ -12,6 +12,7 @@
 from ._remote import Capability, Pipeline, RemoteZeroGrad, Run
 from ._version import __version__
 from .client import ZeroGrad
+from .curve import ContextCurve
 from .errors import (
     APIError,
     AuthError,
@@ -27,7 +28,7 @@ from .models import LicenseGuardError, NonCommercialModelWarning, list_models, l
 from .privacy import SensitiveDataWarning, Vault, drop_sensitive, scan
 
 __all__ = [
-    "ZeroGrad", "LocalZeroGrad", "RemoteZeroGrad", "LocalCapability", "Capability", "Run", "Pipeline", "load",
+    "ZeroGrad", "LocalZeroGrad", "RemoteZeroGrad", "LocalCapability", "Capability", "Run", "Pipeline", "load", "ContextCurve",
     "list_models", "list_tasks", "model_info", "register_model", "NonCommercialModelWarning", "LicenseGuardError",
     "ZeroGradError", "AuthError", "NotFoundError", "ValidationError", "LimitError",
     "RunFailedError", "APIError", "UsageWarning",

@@ -13,6 +13,9 @@ First open source release, Apache 2.0. `pip install zerograd` includes the local
 * **Catalog.** `zerograd.list_models(task=..., commercial=...)` and `zerograd.list_tasks()`, as tables in
   notebooks and terminals, from the same registry the license guards use.
 * **Bring your own model** with `zerograd.register_model`.
+* **Context curves.** `zg.context_curve(...)` and `cap.context_curve(test)` score one model on growing context
+  sizes, with timings, and recommend the smallest size within a tolerance of the best score; `.plot()` draws
+  score and latency. `cap.update(context_rows=n)` predicts with the smaller context.
 * `remote=True` (or an API key) keeps the platform client from 0.1: capabilities with versions, batch runs,
   pipelines, scheduled championships.
 

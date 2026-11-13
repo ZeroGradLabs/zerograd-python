@@ -22,12 +22,15 @@ import pandas as pd
 
 from .._ui import Console, phrase
 from .._version import __version__
+from ..curve import DEFAULT_TOLERANCE, ContextCurve, check_sizes
+from ..curve import ms_per_row as _ms_per_row
 from ..errors import ValidationError
 from ..models import FittedModel, ModelSpec, get_model, resolve_models
 from . import championship as champ
 from .preprocess import Preprocessor
 
 FORMAT = "zerograd.local/1"
+_UNSET: Any = object()
 
 
 class LocalZeroGrad:
@@ -110,6 +113,52 @@ class LocalZeroGrad:
                   cap.attribution, baseline=majority.metrics.get(metric) if majority else None)
         ui.say(f"  {ui.dim(phrase('champion'))}")
         return cap
+
+    def context_curve(self, examples: Any, target: str, sizes: Iterable[int] | None = None, test: Any = None, *,
+                      model: str | None = None, metric: str | None = None, seed: int = 0,
+                      tolerance: float = DEFAULT_TOLERANCE, drop: Iterable[str] | None = None) -> ContextCurve:
+        """Fit one model on growing samples of the context and score each on the same holdout, with timings.
+
+        Finds the trade-off between speed and quality: the recommended size is the smallest context whose
+        `metric` is within `tolerance` of the best. `sizes` defaults to 250, 500, 1K, 2K, 5K, 10K, ... up to
+        every training row; `test` defaults to a stratified 20% of `examples` that no context ever sees.
+        `model` defaults to the first selected model. Returns a ContextCurve (a DataFrame with `.plot()`).
+        """
+        from .._remote import to_frame
+
+        metric = champ.check_metric(metric)
+        df = to_frame(examples)
+        lim = self.limits
+        pre, kept = Preprocessor.fit(df, target, drop=list(drop or []), max_columns=lim["max_columns"],
+                                     max_classes=lim["max_classes"], min_rows=lim["min_rows"])
+        if metric not in [m for m, (_, _, tasks) in champ.METRICS.items() if pre.task in tasks]:
+            raise ValidationError(f"Metric '{metric}' does not apply to a {pre.task} task.", code="invalid_metric")
+        X, y = pre.transform(kept), pre.encode_target(kept[target])
+        if test is None:
+            train_idx, hold_idx = champ.holdout_split(y, lim["holdout_fraction"], seed=seed,
+                                                      max_rows=lim["max_holdout_rows"])
+            Xc, yc, Xt, yt = X[train_idx], y[train_idx], X[hold_idx], y[hold_idx]
+        else:
+            t = to_frame(test)
+            if target not in t.columns:
+                raise ValidationError(f"test needs the target column '{target}' to be scored.", code="missing_target")
+            t = t[t[target].notna()]
+            Xc, yc, Xt, yt = X, y, pre.transform(t), pre.encode_target(t[target])
+        spec = self._pick(model)
+        ui = Console(self.progress)
+        _prefetch([spec], ui)
+        return _context_curve(spec, Xc, yc, Xt, yt, len(pre.classes), check_sizes(sizes, len(yc)), metric=metric,
+                              seed=seed, tolerance=tolerance, chunk=lim["predict_chunk_rows"], ui=ui)
+
+    def _pick(self, model: str | None) -> ModelSpec:
+        if model is None:
+            if not self.specs:
+                raise ValidationError("No models installed yet: pip install zerograd", code="no_models")
+            return self.specs[0]
+        spec = next((s for s in self.specs if model in (s.name, s.display)), None)
+        if spec is None:
+            spec = resolve_models([model], self._noncommercial)[0]
+        return spec
 
 
 class LocalCapability:
@@ -197,8 +246,46 @@ class LocalCapability:
         keep = [c for c in ("display", "roc_auc", "accuracy", "log_loss") if c in df]
         return df[keep].rename(columns={"display": "baseline"}).set_index("baseline") if len(df) else df
 
-    def update(self, *, threshold: float | None = None) -> "LocalCapability":
-        """Binary tasks: score >= threshold predicts the positive class. None resets to 0.5."""
+    def context_curve(self, test: Any, sizes: Iterable[int] | None = None, *, metric: str | None = None,
+                      seed: int = 0, tolerance: float = DEFAULT_TOLERANCE) -> ContextCurve:
+        """The champion on growing samples of this capability's own context, scored on `test` (with the target).
+
+        Use it to serve with a smaller, faster context: `cap.update(context_rows=curve.recommended)`.
+        """
+        from .._remote import to_frame
+
+        metric = champ.check_metric(metric or self.metric)
+        t = to_frame(test)
+        target = self.pre.target
+        if target not in t.columns:
+            raise ValidationError(f"test needs the target column '{target}' to be scored.", code="missing_target")
+        t = t[t[target].notna()]
+        ui = Console(self._progress)
+        _prefetch([self.spec], ui)
+        return _context_curve(self.spec, self.context_X, self.context_y, self.pre.transform(t),
+                              self.pre.encode_target(t[target]), len(self.classes),
+                              check_sizes(sizes, len(self.context_y)), metric=metric, seed=seed, tolerance=tolerance,
+                              chunk=self._chunk, ui=ui)
+
+    def update(self, *, threshold: Any = _UNSET, context_rows: int | None = None) -> "LocalCapability":
+        """Binary tasks: score >= threshold predicts the positive class. None resets to 0.5.
+
+        `context_rows` keeps a stratified sample of that many context rows (smaller is faster; see
+        `context_curve`). It only shrinks: the rows left out are gone from this capability.
+        """
+        if context_rows is not None:
+            n = int(context_rows)
+            if n < 2:
+                raise ValidationError("context_rows is a row count, at least 2.", code="invalid_context_rows")
+            if n < len(self.context_y):
+                keep = champ.stratified_sample(self.context_y, n, seed=0)
+                self.context_X, self.context_y = self.context_X[keep], self.context_y[keep]
+                self._fitted = None
+            if threshold is _UNSET:
+                return self
+        return self._set_threshold(None if threshold is _UNSET else threshold)
+
+    def _set_threshold(self, threshold: float | None) -> "LocalCapability":
         if threshold is not None:
             if self.pre.task != "binary":
                 raise ValidationError("A threshold only applies to binary capabilities.", code="invalid_threshold")
@@ -297,6 +384,41 @@ def load(path: str | Path, *, noncommercial: Iterable[str] = (), progress: bool 
 
 
 # ---------------------------------------------------------------------- helpers
+def _context_curve(spec: ModelSpec, Xc: np.ndarray, yc: np.ndarray, Xt: np.ndarray, yt: np.ndarray, n_classes: int,
+                   sizes: list[int], *, metric: str, seed: int, tolerance: float, chunk: int, ui: Console) -> ContextCurve:
+    """Fit `spec` on a stratified sample of each size, score it on (Xt, yt) and time the fit and the predictions."""
+    label = champ.METRICS[metric][0]
+    ui.say(f"{ui.accent('◆')} Context curve · {spec.display} · {len(sizes)} sizes · {len(yt):,} test rows")
+    rows = []
+    for size in sizes:
+        idx = champ.stratified_sample(yc, size, seed=seed)
+        row: dict[str, Any] = {"rows": int(len(idx))}
+        with ui.spinner(f"{len(idx):,} rows of context") as sp:
+            try:
+                t0 = time.monotonic()
+                fitted = spec.fit(Xc[idx], yc[idx], n_classes, serving=False)
+                t1 = time.monotonic()
+                proba = champ.predict_in_chunks(fitted, Xt, chunk)
+                t2 = time.monotonic()
+                m = champ.metrics(yt, proba, n_classes)
+                row.update({metric: m.get(metric), "fit_seconds": t1 - t0, "predict_seconds": t2 - t1,
+                            "ms_per_row": _ms_per_row(t2 - t1, len(yt)), "error": None})
+            except Exception as exc:  # a size that fails (e.g. out of memory) is a result too
+                row.update({metric: None, "error": f"{type(exc).__name__}: {exc}"[:200]})
+            secs = sp.elapsed
+        v = row.get(metric)
+        ui.done(f"{len(idx):,} rows · " + (f"{label} {v:.3f}" if v is not None else ui.warn("failed"))
+                + ui.dim(f" · {secs:.1f}s"))
+        rows.append(row)
+    if all(r.get("error") is None for r in rows):
+        for r in rows:
+            r.pop("error", None)
+    curve = ContextCurve.build(rows, metric=metric, tolerance=tolerance, model=spec.display)
+    if curve.recommended is not None:
+        ui.say(f"  {ui.good('→')} {curve.summary()}")
+    return curve
+
+
 class _Live:
     """Turns the championship's progress callback into a spinner per model and a ✓ line when it finishes."""
 

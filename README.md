@@ -124,6 +124,26 @@ cap.predict({"Pclass": 3, "Sex": "male", "Age": 22, "Fare": 7.25})   # one row -
 cap.update(threshold=0.3)              # binary: score >= 0.3 predicts the positive class
 ```
 
+## Context size: speed against quality
+
+Foundation models read their context (your labeled rows) on every prediction, so more rows usually score better
+and answer slower. `context_curve` fits one model on growing samples of the context, scores each on the same test
+rows and times it:
+
+```python
+curve = zg.context_curve(train_df, "Survived", test=test_df)   # sizes: 250, 500, 1K, 2K, 5K, 10K... up to all rows
+curve                    # per size: the metric, fit and predict seconds, ms per row, and the recommended size
+curve.recommended        # the smallest context within 0.005 of the best score (tolerance=...)
+curve.plot()             # score and latency on two axes, the recommended size marked (needs matplotlib)
+
+curve = cap.context_curve(test_df)               # the champion, on samples of the capability's own context
+cap.update(context_rows=curve.recommended)       # predict with the smaller, faster context
+```
+
+Options: `sizes=[...]`, `model="tabicl-v2"` (default: the first selected model), `metric="log_loss"`, `tolerance=0.01`.
+Without `test`, a stratified 20% of the rows is held out. With `remote=True` the curve runs a championship per size
+on the platform and returns the same kind of table.
+
 ## Save and open
 
 ```python

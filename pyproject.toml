@@ -38,7 +38,7 @@ local = []
 mitra = ["autogluon.tabular[mitra]>=1.6"]
 tabdpt = ["tabdpt>=1.1"]
 all = ["zerograd[mitra,tabdpt]"]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "matplotlib>=3.5"]
 
 [project.urls]
 Homepage = "https://zerograd.dev"
