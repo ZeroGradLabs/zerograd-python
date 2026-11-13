@@ -29,6 +29,22 @@ def report(res: pd.DataFrame, out: str | None = None) -> str:
         parts += ["", f"ZeroGrad champion vs HistGradientBoosting: {int((diff > 0.001).sum())} wins, "
                   f"{int((diff.abs() <= 0.001).sum())} ties, {int((diff < -0.001).sum())} losses "
                   f"(mean difference {diff.mean():+.3f})"]
+    # the other metrics, champion against HistGradientBoosting, averaged over datasets
+    other = [("test_log_loss", "Log loss", False), ("test_brier", "Brier score", False), ("test_accuracy", "Accuracy", True),
+             ("test_balanced_accuracy", "Balanced accuracy", True), ("test_f1", "F1", True), ("seconds", "Seconds per fit + predict", False)]
+    lines = []
+    for col, label, higher in other:
+        if col not in res:
+            continue
+        t = res.pivot_table(index="dataset", columns="model", values=col, aggfunc="mean")
+        if "HistGradientBoosting" not in t or "ZeroGrad champion" not in t:
+            continue
+        d = (t["ZeroGrad champion"] - t["HistGradientBoosting"]) * (1 if higher else -1)
+        lines.append(f"| {label} | {t['HistGradientBoosting'].mean():.3f} | {t['ZeroGrad champion'].mean():.3f} | "
+                     f"{int((d > 1e-3).sum())} / {int((d.abs() <= 1e-3).sum())} / {int((d < -1e-3).sum())} |")
+    if lines:
+        parts += ["", "Other metrics, mean over datasets (wins / ties / losses for the champion)", "",
+                  "| metric | HistGradientBoosting | ZeroGrad champion | W / T / L |", "|---|---|---|---|", *lines]
     errors = res[res["error"].notna()] if "error" in res else res.iloc[0:0]
     if len(errors):
         parts += ["", f"{len(errors)} model runs failed; see the error column" + (f" in {out}" if out else "")]

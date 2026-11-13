@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, log_loss, roc_auc_score
 from sklearn.model_selection import train_test_split
 
 os.environ.setdefault("ZEROGRAD_QUIET", "1")
@@ -71,6 +71,22 @@ def auc(y_true: np.ndarray, proba: np.ndarray) -> float:
     return float(roc_auc_score(y_true, proba, multi_class="ovr", labels=list(range(proba.shape[1]))))
 
 
+def scores(y_true: np.ndarray, proba: np.ndarray) -> dict:
+    """Every test metric for one model: ranking, probabilities and hard predictions at argmax (0.5 for binary)."""
+    k = proba.shape[1]
+    proba = np.clip(proba, 1e-15, 1)
+    proba = proba / proba.sum(axis=1, keepdims=True)
+    pred = proba.argmax(axis=1)
+    out = {"test_roc_auc": auc(y_true, proba),
+           "test_log_loss": float(log_loss(y_true, proba, labels=list(range(k)))),
+           "test_accuracy": float(accuracy_score(y_true, pred)),
+           "test_balanced_accuracy": float(balanced_accuracy_score(y_true, pred)),
+           "test_f1": float(f1_score(y_true, pred, average="binary" if k == 2 else "macro"))}
+    onehot = np.eye(k)[y_true]
+    out["test_brier"] = float(((proba - onehot) ** 2).sum(axis=1).mean() / (1 if k > 2 else 2))
+    return out
+
+
 def run_one(df: pd.DataFrame, target: str, name: str, seed: int, specs) -> list[dict]:
     df = df[df[target].notna()].reset_index(drop=True)
     if len(df) > MAX_ROWS:
@@ -86,11 +102,11 @@ def run_one(df: pd.DataFrame, target: str, name: str, seed: int, specs) -> list[
     def record(model: str, fn) -> None:
         t0 = time.monotonic()
         try:
-            value, err = auc(yte, fn()), None
+            values, err = scores(yte, fn()), None
         except Exception as exc:  # a model failing is a result too
-            value, err = None, f"{type(exc).__name__}: {exc}"[:200]
+            values, err = {"test_roc_auc": None}, f"{type(exc).__name__}: {exc}"[:200]
         rows.append({"dataset": name, "seed": seed, "rows": len(df), "classes": n, "model": model,
-                     "test_roc_auc": value, "seconds": round(time.monotonic() - t0, 1), "error": err})
+                     **values, "seconds": round(time.monotonic() - t0, 1), "error": err})
 
     for spec in specs:
         record(spec.display, lambda spec=spec: spec.fit(Xtr[ctx], ytr[ctx], n, serving=False).predict_proba(Xte))
