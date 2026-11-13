@@ -13,7 +13,7 @@ For each dataset and seed: a stratified 80/20 split (on the target's quantile bi
   scored on test.
 * The ZeroGrad champion is chosen by the championship on the training rows only, then scored on test.
 * HistGradientBoosting (scikit-learn, defaults; the regressor for numeric targets) is the classic baseline, fit
-  on the same training rows.
+  on the same training rows. Regression also gets a linear baseline: Ridge on standardized features.
 Writes benchmarks/results.csv and prints Markdown tables (ROC AUC for classification, RMSE and R² for
 regression), with wins and losses.
 """
@@ -117,6 +117,17 @@ def regression_scores(y_true: np.ndarray, pred: np.ndarray) -> dict:
             "test_r2": float(r2_score(y_true, pred))}
 
 
+def ridge():
+    """The linear baseline: Ridge (alpha chosen by cross-validation) on standardized features, median-imputed.
+    Categorical columns arrive as the preprocessor's codes, as they do for every other model."""
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import RidgeCV
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    return make_pipeline(SimpleImputer(strategy="median"), StandardScaler(), RidgeCV(alphas=np.logspace(-3, 3, 13)))
+
+
 def run_regression(df: pd.DataFrame, target: str, name: str, seed: int, specs) -> list[dict]:
     df = df[pd.to_numeric(df[target], errors="coerce").notna()].reset_index(drop=True)
     bins = lambda d: strata(pd.to_numeric(d[target]).to_numpy(), "regression")  # noqa: E731
@@ -142,6 +153,7 @@ def run_regression(df: pd.DataFrame, target: str, name: str, seed: int, specs) -
     for spec in specs:
         record(spec.display, lambda spec=spec: spec.fit_regressor(Xtr[ctx], ytr[ctx], serving=False).predict(Xte))
     record("HistGradientBoosting", lambda: HistGradientBoostingRegressor(random_state=seed).fit(Xtr, ytr).predict(Xte))
+    record("Ridge", lambda: ridge().fit(Xtr, ytr).predict(Xte))
 
     champ: list[str] = []
 

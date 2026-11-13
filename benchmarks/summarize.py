@@ -38,26 +38,32 @@ def report(res: pd.DataFrame, out: str | None = None) -> str:
 
 
 def regression_report(res: pd.DataFrame) -> str:
-    """RMSE per dataset, R² per dataset (comparable across datasets), and the champion's wins on each metric.
-    A tie is within 0.5% of HistGradientBoosting (RMSE, MAE, seconds) or 0.001 (R²)."""
+    """RMSE per dataset, R² per dataset (comparable across datasets), and the champion's wins on each metric
+    against each baseline. A tie is within 0.5% of the baseline (RMSE, MAE, seconds) or 0.001 (R²)."""
     rmse = res.pivot_table(index="dataset", columns="model", values="test_rmse", aggfunc="mean")
     r2 = res.pivot_table(index="dataset", columns="model", values="test_r2", aggfunc="mean")
     parts = ["Regression: mean test RMSE (lower is better)", "", markdown(rmse, higher=False, fmt="%.4g"),
              "", "Regression: mean test R² (higher is better)", "", markdown(r2.round(3))]
+    for baseline in ("HistGradientBoosting", "Ridge"):
+        parts += ["", wins_table(res, baseline)]
+    return "\n".join(parts)
+
+
+def wins_table(res: pd.DataFrame, baseline: str) -> str:
     lines = []
     for col, label, higher, rel in [("test_rmse", "RMSE", False, True), ("test_mae", "MAE", False, True),
                                     ("test_r2", "R²", True, False), ("seconds", "Seconds per fit + predict", False, True)]:
         t = res.pivot_table(index="dataset", columns="model", values=col, aggfunc="mean")
-        if "HistGradientBoosting" not in t or "ZeroGrad champion" not in t:
+        if baseline not in t or "ZeroGrad champion" not in t:
             continue
-        base, champ = t["HistGradientBoosting"], t["ZeroGrad champion"]
+        base, champ = t[baseline], t["ZeroGrad champion"]
         d = (champ - base) * (1 if higher else -1)
         tol = (0.005 * base.abs()) if rel else 1e-3
         lines.append(f"| {label} | {int((d > tol).sum())} / {int((d.abs() <= tol).sum())} / {int((d < -tol).sum())} |")
-    if lines:
-        parts += ["", "Regression: ZeroGrad champion vs HistGradientBoosting (wins / ties / losses)", "",
-                  "| metric | W / T / L |", "|---|---|", *lines]
-    return "\n".join(parts)
+    if not lines:
+        return ""
+    return "\n".join([f"Regression: ZeroGrad champion vs {baseline} (wins / ties / losses)", "",
+                      "| metric | W / T / L |", "|---|---|", *lines])
 
 
 def classification_report(res: pd.DataFrame) -> str:
