@@ -360,7 +360,7 @@ def run_championship(
     observe: Observe | None = None,
 ) -> ChampionshipResult:
     if not models:
-        raise Invalid("No models to run. Install some with pip install \"zerograd[local]\" or pass models=[...].", code="no_models")
+        raise Invalid("No models to run. Install some with pip install zerograd or pass models=[...].", code="no_models")
     X = pre.transform(df)
     y = pre.encode_target(df[pre.target])
     n_classes = len(pre.classes)

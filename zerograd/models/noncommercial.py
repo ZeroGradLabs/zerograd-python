@@ -74,7 +74,7 @@ for _name, _display, _version, _repo in (
         license_url=f"https://huggingface.co/Prior-Labs/{_repo}",
         source=f"huggingface.co/Prior-Labs/{_repo} (gated: sign in and accept the license when asked)",
         commercial=False,
-        install='pip install "zerograd[local]"',
+        install="pip install zerograd",
         attribution="Built with PriorLabs-TabPFN",
         max_classes=10,
         notes=_NC,

@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv venv --python ${{ matrix.python }}
-      - run: uv pip install -e ".[dev]"
+      - run: uv pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
       - run: uv run ruff check .
       - run: uv run pytest -q
 

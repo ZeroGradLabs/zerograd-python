@@ -2,7 +2,7 @@
 
 ## 0.2.0 (unreleased)
 
-First open source release, Apache 2.0.
+First open source release, Apache 2.0. `pip install zerograd` includes the local engine with TabPFN v2 and TabICLv2.
 
 * **Local engine.** `ZeroGrad()` without an API key runs the championship and predictions on your machine:
   every model scored on the same holdout, champion by ROC AUC (or the metric you pick), predictions with the

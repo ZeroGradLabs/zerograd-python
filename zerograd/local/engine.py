@@ -51,7 +51,7 @@ class LocalZeroGrad:
         self.ui = Console(progress)
         names = ", ".join(s.display for s in self.specs)
         self.ui.greet("local", f"{len(self.specs)} model{'s' if len(self.specs) != 1 else ''} ready: {names}" if self.specs
-                      else 'no models installed yet: pip install "zerograd[local]"')
+                      else 'no models installed yet: pip install zerograd')
         self.limits = dict(max_context_rows=max_context_rows, max_holdout_rows=max_holdout_rows,
                            holdout_fraction=holdout_fraction, max_columns=max_columns, max_classes=max_classes,
                            min_rows=min_rows, predict_chunk_rows=predict_chunk_rows)

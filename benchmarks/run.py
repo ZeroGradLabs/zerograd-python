@@ -1,0 +1,164 @@
+"""A short, reproducible benchmark: ZeroGrad's models and champion against gradient boosting.
+
+    pip install "zerograd[all]"
+    python benchmarks/run.py                        # the default OpenML datasets, 3 seeds
+    python benchmarks/run.py --datasets 31 37 --seeds 1
+    python benchmarks/run.py --csv my.csv --target churned
+
+For each dataset and seed: a stratified 80/20 split. The test 20% is never seen by anything.
+* Every installed commercial model is fit on the training rows (a stratified sample of up to 10,000) and
+  scored on test.
+* The ZeroGrad champion is chosen by the championship on the training rows only, then scored on test.
+* HistGradientBoosting (scikit-learn, defaults) is the classic baseline, fit on the same training rows.
+Writes benchmarks/results.csv and prints a Markdown table of mean test ROC AUC, with wins and losses.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import time
+import warnings
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
+
+os.environ.setdefault("ZEROGRAD_QUIET", "1")
+warnings.filterwarnings("ignore")
+
+from zerograd import ZeroGrad  # noqa: E402
+from zerograd.local.championship import stratified_sample  # noqa: E402
+from zerograd.local.preprocess import Preprocessor  # noqa: E402
+from zerograd.models import resolve_models  # noqa: E402
+
+# OpenML classification datasets that appear in tabular benchmarks (TabArena among them): small to medium,
+# binary and multiclass, numeric and categorical. Ids are OpenML dataset ids.
+DEFAULT_DATASETS = {
+    31: "credit-g",
+    37: "diabetes",
+    1464: "blood-transfusion",
+    1494: "qsar-biodeg",
+    1067: "kc1",
+    40981: "Australian",
+    40701: "churn",
+    1489: "phoneme",
+    40983: "wilt",
+    1487: "ozone-level-8hr",
+    23: "cmc",
+    54: "vehicle",
+}
+MAX_ROWS = 20_000  # bigger datasets are subsampled (stratified) so a CPU run ends today
+
+
+def load_openml(data_id: int) -> tuple[pd.DataFrame, str, str]:
+    from sklearn.datasets import fetch_openml
+
+    bunch = fetch_openml(data_id=data_id, as_frame=True, parser="auto")
+    df = bunch.frame
+    target = bunch.target.name if hasattr(bunch.target, "name") else bunch.target_names[0]
+    return df, target, bunch.details.get("name", str(data_id))
+
+
+def auc(y_true: np.ndarray, proba: np.ndarray) -> float:
+    if proba.shape[1] == 2:
+        return float(roc_auc_score(y_true, proba[:, 1]))
+    return float(roc_auc_score(y_true, proba, multi_class="ovr", labels=list(range(proba.shape[1]))))
+
+
+def run_one(df: pd.DataFrame, target: str, name: str, seed: int, specs) -> list[dict]:
+    df = df[df[target].notna()].reset_index(drop=True)
+    if len(df) > MAX_ROWS:
+        df = df.iloc[stratified_sample(df[target].astype(str).to_numpy(), MAX_ROWS, seed=seed)].reset_index(drop=True)
+    train, test = train_test_split(df, test_size=0.2, stratify=df[target], random_state=seed)
+    pre, kept = Preprocessor.fit(train, target)
+    Xtr, ytr = pre.transform(kept), pre.encode_target(kept[target])
+    Xte, yte = pre.transform(test), pre.encode_target(test[target])
+    ctx = stratified_sample(ytr, 10_000, seed=seed)
+    n = len(pre.classes)
+    rows = []
+
+    def record(model: str, fn) -> None:
+        t0 = time.monotonic()
+        try:
+            value, err = auc(yte, fn()), None
+        except Exception as exc:  # a model failing is a result too
+            value, err = None, f"{type(exc).__name__}: {exc}"[:200]
+        rows.append({"dataset": name, "seed": seed, "rows": len(df), "classes": n, "model": model,
+                     "test_roc_auc": value, "seconds": round(time.monotonic() - t0, 1), "error": err})
+
+    for spec in specs:
+        record(spec.display, lambda spec=spec: spec.fit(Xtr[ctx], ytr[ctx], n, serving=False).predict_proba(Xte))
+    record("HistGradientBoosting", lambda: HistGradientBoostingClassifier(random_state=seed).fit(Xtr, ytr).predict_proba(Xte))
+
+    def champion():
+        cap = ZeroGrad(remote=False, models=[s.name for s in specs], progress=False).create(name, train, target)
+        out = cap.predict(test.drop(columns=target))
+        rows_champ.append(cap.champion_display)
+        return out[[f"proba_{c}" for c in cap.classes]].to_numpy()
+
+    rows_champ: list[str] = []
+    record("ZeroGrad champion", champion)
+    if rows_champ:
+        rows[-1]["champion"] = rows_champ[0]
+    return rows
+
+
+def _markdown(table: pd.DataFrame) -> str:
+    cols = list(table.columns)
+    lines = ["| dataset | " + " | ".join(cols) + " |", "|---" * (len(cols) + 1) + "|"]
+    for name, row in table.iterrows():
+        best = row.max()
+        cells = [("**%.3f**" % v if v == best else "%.3f" % v) if pd.notna(v) else "—" for v in row]
+        lines.append(f"| {name} | " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--datasets", nargs="*", type=int, help="OpenML dataset ids (default: the built-in list)")
+    ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--models", nargs="*", help="model names (default: every installed commercial model)")
+    ap.add_argument("--csv", help="run on your own CSV instead of OpenML")
+    ap.add_argument("--target", help="target column for --csv")
+    ap.add_argument("--out", default=str(Path(__file__).with_name("results.csv")))
+    args = ap.parse_args()
+
+    specs = resolve_models(args.models)
+    print(f"Models: {', '.join(s.display for s in specs)} + HistGradientBoosting baseline")
+    if args.csv:
+        sources = [(pd.read_csv(args.csv), args.target, Path(args.csv).stem)]
+    else:
+        sources = []
+        for data_id in args.datasets or DEFAULT_DATASETS:
+            df, target, name = load_openml(data_id)
+            sources.append((df, target, name))
+
+    results = []
+    for df, target, name in sources:
+        for seed in range(args.seeds):
+            print(f"… {name} (seed {seed}, {len(df):,} rows)", flush=True)
+            results += run_one(df, target, name, seed, specs)
+            pd.DataFrame(results).to_csv(args.out, index=False)
+
+    res = pd.DataFrame(results)
+    raw = res.pivot_table(index="dataset", columns="model", values="test_roc_auc", aggfunc="mean")
+    table = raw.round(3)
+    print("\nMean test ROC AUC (higher is better)\n")
+    print(_markdown(table))
+    if "HistGradientBoosting" in table and "ZeroGrad champion" in table:
+        diff = raw["ZeroGrad champion"] - raw["HistGradientBoosting"]
+        print(f"\nZeroGrad champion vs HistGradientBoosting: {int((diff > 0.001).sum())} wins, "
+              f"{int((diff.abs() <= 0.001).sum())} ties, {int((diff < -0.001).sum())} losses "
+              f"(mean difference {diff.mean():+.3f})")
+    errors = res[res["error"].notna()]
+    if len(errors):
+        print(f"\n{len(errors)} model runs failed; see the error column in {args.out}")
+    print(f"\nAll rows: {args.out}")
+
+
+if __name__ == "__main__":
+    main()
