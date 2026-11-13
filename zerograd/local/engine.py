@@ -20,12 +20,12 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
-from .._ui import Console, phrase
+from .._ui import Console, fmt_value, phrase
 from .._version import __version__
-from ..curve import DEFAULT_TOLERANCE, ContextCurve, check_sizes
+from ..curve import ContextCurve, check_sizes
 from ..curve import ms_per_row as _ms_per_row
 from ..errors import ValidationError
-from ..models import FittedModel, ModelSpec, get_model, resolve_models
+from ..models import FittedModel, ModelSpec, all_models, get_model, resolve_models
 from . import championship as champ
 from .preprocess import Preprocessor
 
@@ -71,71 +71,82 @@ class LocalZeroGrad:
         return df
 
     def create(self, name: str, examples: Any, target: str, *, drop: Iterable[str] | None = None,
-               metric: str | None = None) -> "LocalCapability":
+               metric: str | None = None, task: str | None = None) -> "LocalCapability":
         """Run the championship on labeled history and return the capability with its champion.
 
-        `examples` is a DataFrame or a CSV/Parquet path. `metric` picks the champion: roc_auc (default), pr_auc,
-        log_loss, accuracy, balanced_accuracy, f1, precision or recall (binary), f1_macro (multiclass).
+        `examples` is a DataFrame or a CSV/Parquet path. `task` is "classification" or "regression"; left out,
+        a numeric target with decimals or more than `max_classes` distinct values is regression.
+        `metric` picks the champion. Classification: roc_auc (default), pr_auc, log_loss, accuracy,
+        balanced_accuracy, f1, precision or recall (binary), f1_macro (multiclass). Regression: rmse (default),
+        mae or r2.
         """
         from .._remote import to_frame
 
         if isinstance(examples, str) and (examples.startswith("gs://") or examples.startswith("upl_")):
             raise ValidationError("Bucket URIs and upload ids need the platform: use ZeroGrad(remote=True).")
-        metric = champ.check_metric(metric)
+        if metric is not None:
+            champ.check_metric(metric)
         df = to_frame(examples)
         lim = self.limits
         pre, kept = Preprocessor.fit(df, target, drop=list(drop or []), max_columns=lim["max_columns"],
-                                     max_classes=lim["max_classes"], min_rows=lim["min_rows"])
-        if metric not in [m for m, (_, _, tasks) in champ.METRICS.items() if pre.task in tasks]:
-            raise ValidationError(f"Metric '{metric}' does not apply to a {pre.task} task.", code="invalid_metric")
+                                     max_classes=lim["max_classes"], min_rows=lim["min_rows"], task=task)
+        metric = champ.check_metric(metric, pre.task)
         ui = Console(self.progress)
+        specs = self._for_task(pre.task, ui)
         ui.done(f"{len(kept):,} labeled rows · {len(pre.columns)} columns used"
+                + (f" · {_describe_target(pre)}" if pre.regression else "")
                 + (ui.dim(f" · dropped {', '.join(d['name'] for d in pre.dropped)}") if pre.dropped else ""))
-        _prefetch(self.specs, ui)
-        ui.say(f"{ui.accent('◆')} Championship · {len(self.specs)} model{'s' if len(self.specs) != 1 else ''} · "
+        _prefetch(specs, ui, pre.task)
+        ui.say(f"{ui.accent('◆')} Championship · {len(specs)} model{'s' if len(specs) != 1 else ''} · "
                f"{ui.dim(phrase('championship'))}")
         live = _Live(ui)
         t0 = time.monotonic()
         try:
             result = champ.run_championship(
-                pre, kept, self.specs, max_context_rows=lim["max_context_rows"],
+                pre, kept, specs, max_context_rows=lim["max_context_rows"],
                 holdout_fraction=lim["holdout_fraction"], chunk=lim["predict_chunk_rows"], progress=live.progress,
                 max_holdout_rows=lim["max_holdout_rows"], metric=metric,
             )
         finally:
             live.close()
         cap = LocalCapability(name=name, pre=pre, result=result, metric=metric, seconds=time.monotonic() - t0,
-                              noncommercial=[s.name for s in self.specs if not s.commercial],
+                              noncommercial=[s.name for s in specs if not s.commercial],
                               chunk=lim["predict_chunk_rows"], progress=self.progress)
         ranked = sorted(result.candidates, key=champ.rank_key(metric), reverse=True)
-        majority = next((b for b in result.baselines or [] if b.model == "baseline:majority"), None)
-        ui.podium([(c.display, c.metrics.get(metric), c.error) for c in ranked], champ.METRICS[metric][0],
-                  cap.attribution, baseline=majority.metrics.get(metric) if majority else None)
+        base_name, base_label = ("baseline:mean", "always the average") if pre.regression else (
+            "baseline:majority", "majority class")
+        base = next((b for b in result.baselines or [] if b.model == base_name), None)
+        label, higher, _ = champ.METRICS[metric]
+        ui.podium([(c.display, c.metrics.get(metric), c.error) for c in ranked], label,
+                  cap.attribution, baseline=base.metrics.get(metric) if base else None,
+                  higher_is_better=higher, baseline_label=base_label)
         ui.say(f"  {ui.dim(phrase('champion'))}")
         return cap
 
     def context_curve(self, examples: Any, target: str, sizes: Iterable[int] | None = None, test: Any = None, *,
                       model: str | None = None, metric: str | None = None, seed: int = 0,
-                      tolerance: float = DEFAULT_TOLERANCE, drop: Iterable[str] | None = None) -> ContextCurve:
+                      tolerance: float | None = None, drop: Iterable[str] | None = None,
+                      task: str | None = None) -> ContextCurve:
         """Fit one model on growing samples of the context and score each on the same holdout, with timings.
 
         Finds the trade-off between speed and quality: the recommended size is the smallest context whose
         `metric` is within `tolerance` of the best. `sizes` defaults to 250, 500, 1K, 2K, 5K, 10K, ... up to
         every training row; `test` defaults to a stratified 20% of `examples` that no context ever sees.
         `model` defaults to the first selected model. Returns a ContextCurve (a DataFrame with `.plot()`).
+        `task` works as in `create`. `tolerance` defaults to 0.005 (absolute), or 0.5% of the best for RMSE and MAE.
         """
         from .._remote import to_frame
 
-        metric = champ.check_metric(metric)
+        if metric is not None:
+            champ.check_metric(metric)
         df = to_frame(examples)
         lim = self.limits
         pre, kept = Preprocessor.fit(df, target, drop=list(drop or []), max_columns=lim["max_columns"],
-                                     max_classes=lim["max_classes"], min_rows=lim["min_rows"])
-        if metric not in [m for m, (_, _, tasks) in champ.METRICS.items() if pre.task in tasks]:
-            raise ValidationError(f"Metric '{metric}' does not apply to a {pre.task} task.", code="invalid_metric")
+                                     max_classes=lim["max_classes"], min_rows=lim["min_rows"], task=task)
+        metric = champ.check_metric(metric, pre.task)
         X, y = pre.transform(kept), pre.encode_target(kept[target])
         if test is None:
-            train_idx, hold_idx = champ.holdout_split(y, lim["holdout_fraction"], seed=seed,
+            train_idx, hold_idx = champ.holdout_split(champ.strata(y, pre.task), lim["holdout_fraction"], seed=seed,
                                                       max_rows=lim["max_holdout_rows"])
             Xc, yc, Xt, yt = X[train_idx], y[train_idx], X[hold_idx], y[hold_idx]
         else:
@@ -144,21 +155,39 @@ class LocalZeroGrad:
                 raise ValidationError(f"test needs the target column '{target}' to be scored.", code="missing_target")
             t = t[t[target].notna()]
             Xc, yc, Xt, yt = X, y, pre.transform(t), pre.encode_target(t[target])
-        spec = self._pick(model)
+        spec = self._pick(model, pre.task)
         ui = Console(self.progress)
-        _prefetch([spec], ui)
+        _prefetch([spec], ui, pre.task)
         return _context_curve(spec, Xc, yc, Xt, yt, len(pre.classes), check_sizes(sizes, len(yc)), metric=metric,
-                              seed=seed, tolerance=tolerance, chunk=lim["predict_chunk_rows"], ui=ui)
+                              seed=seed, tolerance=tolerance, chunk=lim["predict_chunk_rows"], ui=ui, task=pre.task)
 
-    def _pick(self, model: str | None) -> ModelSpec:
+    def _pick(self, model: str | None, task: str | None = None) -> ModelSpec:
         if model is None:
-            if not self.specs:
-                raise ValidationError("No models installed yet: pip install zerograd", code="no_models")
-            return self.specs[0]
+            specs = [s for s in self.specs if task is None or s.runs(task)]
+            if not specs:
+                raise ValidationError("No installed model runs this task yet: pip install zerograd", code="no_models")
+            return specs[0]
         spec = next((s for s in self.specs if model in (s.name, s.display)), None)
         if spec is None:
             spec = resolve_models([model], self._noncommercial)[0]
+        if task is not None and not spec.runs(task):
+            raise ValidationError(f"{spec.display} does not run {task} in this version of the SDK.",
+                                  code="unsupported_task")
         return spec
+
+    def _for_task(self, task: str, ui: Console) -> list[ModelSpec]:
+        """The selected models that run this task; the others sit out with a note."""
+        specs = [s for s in self.specs if s.runs(task)]
+        out = [s for s in self.specs if not s.runs(task)]
+        if out:
+            sits = "it sits" if len(out) == 1 else "they sit"
+            ui.say(ui.dim(f"  {', '.join(s.display for s in out)}: {task} is not in this version of the SDK yet, "
+                          f"so {sits} out"))
+        if not specs:
+            raise ValidationError(f"None of the selected models runs {task} in this version of the SDK. Models that "
+                                  f"do: {', '.join(m.name for m in all_models() if m.runs(task) and m.commercial)}.",
+                                  code="unsupported_task")
+        return specs
 
 
 class LocalCapability:
@@ -202,6 +231,7 @@ class LocalCapability:
 
     @property
     def classes(self) -> list:
+        """The labels, in the order of the proba_ columns. Empty for regression."""
         return list(self.pre.classes)
 
     @property
@@ -241,31 +271,32 @@ class LocalCapability:
 
     @property
     def baselines(self) -> pd.DataFrame:
-        """What you get without a model on the same holdout: random scores and always the majority class."""
+        """What you get without a model on the same holdout: random scores and always the majority class
+        (regression: always the average, always the median)."""
         df = pd.DataFrame(self.baseline_rows)
-        keep = [c for c in ("display", "roc_auc", "accuracy", "log_loss") if c in df]
+        keep = [c for c in ("display", "roc_auc", "accuracy", "log_loss", "rmse", "mae", "r2") if c in df]
         return df[keep].rename(columns={"display": "baseline"}).set_index("baseline") if len(df) else df
 
     def context_curve(self, test: Any, sizes: Iterable[int] | None = None, *, metric: str | None = None,
-                      seed: int = 0, tolerance: float = DEFAULT_TOLERANCE) -> ContextCurve:
+                      seed: int = 0, tolerance: float | None = None) -> ContextCurve:
         """The champion on growing samples of this capability's own context, scored on `test` (with the target).
 
         Use it to serve with a smaller, faster context: `cap.update(context_rows=curve.recommended)`.
         """
         from .._remote import to_frame
 
-        metric = champ.check_metric(metric or self.metric)
+        metric = champ.check_metric(metric or self.metric, self.pre.task)
         t = to_frame(test)
         target = self.pre.target
         if target not in t.columns:
             raise ValidationError(f"test needs the target column '{target}' to be scored.", code="missing_target")
         t = t[t[target].notna()]
         ui = Console(self._progress)
-        _prefetch([self.spec], ui)
+        _prefetch([self.spec], ui, self.task)
         return _context_curve(self.spec, self.context_X, self.context_y, self.pre.transform(t),
                               self.pre.encode_target(t[target]), len(self.classes),
                               check_sizes(sizes, len(self.context_y)), metric=metric, seed=seed, tolerance=tolerance,
-                              chunk=self._chunk, ui=ui)
+                              chunk=self._chunk, ui=ui, task=self.task)
 
     def update(self, *, threshold: Any = _UNSET, context_rows: int | None = None) -> "LocalCapability":
         """Binary tasks: score >= threshold predicts the positive class. None resets to 0.5.
@@ -278,7 +309,7 @@ class LocalCapability:
             if n < 2:
                 raise ValidationError("context_rows is a row count, at least 2.", code="invalid_context_rows")
             if n < len(self.context_y):
-                keep = champ.stratified_sample(self.context_y, n, seed=0)
+                keep = champ.stratified_sample(champ.strata(self.context_y, self.task), n, seed=0)
                 self.context_X, self.context_y = self.context_X[keep], self.context_y[keep]
                 self._fitted = None
             if threshold is _UNSET:
@@ -296,13 +327,28 @@ class LocalCapability:
 
     # ------------------------------------------------------------------ predict
     def predict(self, data: Any, *, threshold: float | None = None) -> pd.DataFrame | dict:
-        """prediction, score (binary) and proba_<class>, aligned to the input. A dict (one row) returns a dict."""
+        """prediction, score (binary) and proba_<class>, aligned to the input. A dict (one row) returns a dict.
+
+        Regression: one `prediction` column with the predicted number (a dict: {"prediction": 123.4})."""
         from .._remote import to_frame
 
         one = isinstance(data, dict)
         df = to_frame(data)
         X = self.pre.transform(df)
         model = self._model()
+        if self.pre.regression:
+            if threshold is not None:
+                raise ValidationError("A threshold only applies to binary capabilities.", code="invalid_threshold")
+            if len(X) >= 1000:
+                ui = Console(self._progress)
+                with ui.spinner(f"Scoring {len(X):,} rows with {self.champion_display} · {ui.dim(phrase('predict'))}",
+                                done=f"Scored {len(X):,} rows"):
+                    pred = champ.predict_in_chunks(model, X, self._chunk, self.task)
+            else:
+                pred = champ.predict_in_chunks(model, X, self._chunk, self.task) if len(X) else np.zeros(0)
+            if one:
+                return {"prediction": float(pred[0])}
+            return pd.DataFrame({"prediction": pred}, index=df.index)
         if len(X) >= 1000:
             ui = Console(self._progress)
             with ui.spinner(f"Scoring {len(X):,} rows with {self.champion_display} · {ui.dim(phrase('predict'))}",
@@ -334,10 +380,13 @@ class LocalCapability:
         if self._fitted is None:
             spec = self.spec
             ui = Console(self._progress)
-            _prefetch([spec], ui)
+            _prefetch([spec], ui, self.task)
             with ui.spinner(f"Warming up {spec.display} with {len(self.context_y):,} rows of context · "
                             f"{ui.dim(phrase('fit'))}", done=f"{spec.display} ready"):
-                self._fitted = spec.fit(self.context_X, self.context_y, len(self.classes), serving=True)
+                if self.pre.regression:
+                    self._fitted = spec.fit_regressor(self.context_X, self.context_y, serving=True)
+                else:
+                    self._fitted = spec.fit(self.context_X, self.context_y, len(self.classes), serving=True)
         return self._fitted
 
     # ------------------------------------------------------------------ persistence
@@ -385,29 +434,33 @@ def load(path: str | Path, *, noncommercial: Iterable[str] = (), progress: bool 
 
 # ---------------------------------------------------------------------- helpers
 def _context_curve(spec: ModelSpec, Xc: np.ndarray, yc: np.ndarray, Xt: np.ndarray, yt: np.ndarray, n_classes: int,
-                   sizes: list[int], *, metric: str, seed: int, tolerance: float, chunk: int, ui: Console) -> ContextCurve:
+                   sizes: list[int], *, metric: str, seed: int, tolerance: float | None, chunk: int, ui: Console,
+                   task: str | None = None) -> ContextCurve:
     """Fit `spec` on a stratified sample of each size, score it on (Xt, yt) and time the fit and the predictions."""
     label = champ.METRICS[metric][0]
+    regression = task == champ.REGRESSION
+    strata = champ.strata(yc, task)
     ui.say(f"{ui.accent('◆')} Context curve · {spec.display} · {len(sizes)} sizes · {len(yt):,} test rows")
     rows = []
     for size in sizes:
-        idx = champ.stratified_sample(yc, size, seed=seed)
+        idx = champ.stratified_sample(strata, size, seed=seed)
         row: dict[str, Any] = {"rows": int(len(idx))}
         with ui.spinner(f"{len(idx):,} rows of context") as sp:
             try:
                 t0 = time.monotonic()
-                fitted = spec.fit(Xc[idx], yc[idx], n_classes, serving=False)
+                fitted = (spec.fit_regressor(Xc[idx], yc[idx], serving=False) if regression
+                          else spec.fit(Xc[idx], yc[idx], n_classes, serving=False))
                 t1 = time.monotonic()
-                proba = champ.predict_in_chunks(fitted, Xt, chunk)
+                out = champ.predict_in_chunks(fitted, Xt, chunk, task)
                 t2 = time.monotonic()
-                m = champ.metrics(yt, proba, n_classes)
+                m = champ.regression_metrics(yt, out) if regression else champ.metrics(yt, out, n_classes)
                 row.update({metric: m.get(metric), "fit_seconds": t1 - t0, "predict_seconds": t2 - t1,
                             "ms_per_row": _ms_per_row(t2 - t1, len(yt)), "error": None})
             except Exception as exc:  # a size that fails (e.g. out of memory) is a result too
                 row.update({metric: None, "error": f"{type(exc).__name__}: {exc}"[:200]})
             secs = sp.elapsed
         v = row.get(metric)
-        ui.done(f"{len(idx):,} rows · " + (f"{label} {v:.3f}" if v is not None else ui.warn("failed"))
+        ui.done(f"{len(idx):,} rows · " + (f"{label} {fmt_value(v)}" if v is not None else ui.warn("failed"))
                 + ui.dim(f" · {secs:.1f}s"))
         rows.append(row)
     if all(r.get("error") is None for r in rows):
@@ -460,13 +513,13 @@ class _Live:
         self._finish()
 
 
-def _prefetch(specs: list[ModelSpec], ui: Console) -> None:
+def _prefetch(specs: list[ModelSpec], ui: Console, task: str = "classification") -> None:
     """Download missing weights up front, with a clear line, so they never fight with a spinner."""
     for spec in specs:
-        if spec.weights_fn is None:
-            continue
         try:
-            files = spec.weights_fn()
+            files = spec.weights_for(task)
+            if not files:
+                continue
             from huggingface_hub import hf_hub_download, try_to_load_from_cache
 
             todo = [(r, f) for r, f in files if not isinstance(try_to_load_from_cache(r, f), str)]
@@ -482,6 +535,13 @@ def _prefetch(specs: list[ModelSpec], ui: Console) -> None:
             except Exception as exc:
                 ui.say(ui.warn(f"  could not download {filename}: {type(exc).__name__}"))
                 break
+
+
+def _describe_target(pre: Preprocessor) -> str:
+    st = pre.target_stats
+    if not st:
+        return "regression"
+    return f"regression · {pre.target} from {fmt_value(st['min'])} to {fmt_value(st['max'])}"
 
 
 def _json_default(v: Any) -> Any:

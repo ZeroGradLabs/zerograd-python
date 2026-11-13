@@ -94,7 +94,8 @@ In a notebook these render as tables with a badge for commercial and non-commerc
 | Mitra | `mitra` | Apache 2.0 | yes | by name |
 
 The full list, with sources and the models that are off by default, is in [MODELS.md](MODELS.md).
-The task this version runs is **classification** (binary and multiclass, up to 10 classes).
+This version runs **classification** (binary and multiclass, up to 10 classes) and **regression** (locally, with
+TabPFN v2, TabICLv2 and TabDPT). `zerograd.list_tasks()` shows which models run each task.
 
 ## The championship
 
@@ -154,6 +155,23 @@ Options: `sizes=[...]`, `model="tabicl-v2"` (default: the first selected model),
 Without `test`, a stratified 20% of the rows is held out. With `remote=True` the curve runs a championship per size
 on the platform and returns the same kind of table.
 
+## Regression
+
+A numeric target with decimals, or with more distinct values than classes allowed (10), is a regression:
+
+```python
+cap = zg.create("prices", examples=listings, target="price")   # or task="regression" to say so
+cap.evaluation       # RMSE, MAE and R² per model on the same holdout; the champion has the lowest RMSE
+cap.baselines        # always the average, always the median
+cap.predict(new_listings)                    # one column: prediction
+cap.predict(one_listing)                     # a dict in, {"prediction": 154230.5} out
+```
+
+`metric="mae"` or `metric="r2"` picks the champion by another metric. The holdout and the context are stratified on
+deciles of the target, so both see cheap and expensive rows. Context curves work the same way; for RMSE and MAE the
+tolerance is relative (within 0.5% of the best). Mitra-v2 sits regression out in this version, and the platform
+(`remote=True`) runs classification only for now.
+
 ## Save and open
 
 ```python
@@ -175,7 +193,7 @@ one by name for research and evaluation, and never run on the ZeroGrad platform.
 
 ## Bring your own model
 
-Anything with `fit` and `predict_proba` can compete:
+Anything with `fit` and `predict_proba` can compete (and with `predict`, in regression):
 
 ```python
 from zerograd.models import Aligned, ModelSpec, register_model
@@ -187,6 +205,7 @@ def fit(X, y, n_classes, serving):
 register_model(ModelSpec(
     name="my-model", display="My model", family="mine", license="MIT", license_url="https://...",
     source="local", commercial=True, install="-", fit_fn=fit, check_fn=lambda: None,
+    regress_fn=lambda X, y, serving: MyRegressor().fit(X, y),   # optional: also compete in regression
 ))
 ZeroGrad(models=["tabpfn-v2", "my-model"])
 ```

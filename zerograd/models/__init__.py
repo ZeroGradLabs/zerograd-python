@@ -14,8 +14,10 @@ from .registry import (
     TASKS,
     Aligned,
     FittedModel,
+    FittedRegressor,
     ModelSpec,
     NonCommercialModelWarning,
+    Point,
     all_models,
     get_model,
     register_model,
@@ -24,7 +26,7 @@ from .registry import (
 )
 
 __all__ = [
-    "ModelSpec", "FittedModel", "Aligned", "NonCommercialModelWarning", "LicenseGuardError",
+    "ModelSpec", "FittedModel", "FittedRegressor", "Aligned", "Point", "NonCommercialModelWarning", "LicenseGuardError",
     "register_model", "unregister_model", "get_model", "all_models", "resolve_models", "list_models",
     "list_tasks", "model_info", "ModelCatalog", "TaskCatalog", "TASKS",
     "assert_tabpfn_v2_checkpoint",

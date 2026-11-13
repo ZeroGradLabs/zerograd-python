@@ -28,6 +28,7 @@ def _row(spec: ModelSpec) -> dict[str, Any]:
         "family": spec.family,
         "commercial": spec.commercial,
         "tasks": list(spec.tasks),
+        "runs_in_sdk": list(spec.sdk_tasks),
         "installed": reason is None,
         "unavailable_reason": reason,
         "remote": spec.on_platform,
@@ -85,12 +86,15 @@ class ModelCatalog(_Table):
         if not self.rows:
             return f"{self.title}: no models match."
         head = ("model", "use", "tasks", "installed", "remote", "license")
-        lines = [(r["name"], "commercial" if r["commercial"] else "NON-COMMERCIAL", ", ".join(r["tasks"]),
+        lines = [(r["name"], "commercial" if r["commercial"] else "NON-COMMERCIAL",
+                  ", ".join(t if t in r["runs_in_sdk"] else f"({t})" for t in r["tasks"]),
                   "yes" if r["installed"] else "no", "yes" if r["remote"] else "no", r["license"]) for r in self.rows]
         widths = [max(len(str(x)) for x in col) for col in zip(head, *lines)]
         fmt = "  ".join(f"{{:<{w}}}" for w in widths)
         out = [self.title, fmt.format(*head), fmt.format(*("-" * w for w in widths))]
         out += [fmt.format(*line) for line in lines]
+        if any(set(r["tasks"]) - set(r["runs_in_sdk"]) for r in self.rows):
+            out.append("\n(task) = the model can do it, this version of the SDK does not run it with that model yet.")
         if any(not r["commercial"] for r in self.rows):
             out.append("\nNon-commercial models are off by default: research and evaluation only, never with remote=True.")
         return "\n".join(out)
@@ -102,8 +106,8 @@ class ModelCatalog(_Table):
         for r in self.rows:
             use = (_badge("Commercial use", "#0f7b3f", "#e3f5ea") if r["commercial"]
                    else _badge("Non-commercial", "#9a5b00", "#fff1d6"))
-            tasks = " ".join(_badge(t, "#334", "#eef0f4" if TASKS.get(t, {}).get("in_sdk") else "#f7f7f9",
-                                    dim=not TASKS.get(t, {}).get("in_sdk")) for t in r["tasks"])
+            tasks = " ".join(_badge(t, "#334", "#eef0f4" if t in r["runs_in_sdk"] else "#f7f7f9",
+                                    dim=t not in r["runs_in_sdk"]) for t in r["tasks"])
             installed = "✓" if r["installed"] else f'<span title="{html.escape(r["unavailable_reason"] or "")}">—</span>'
             remote = "✓" if r["remote"] else "—"
             install = "" if r["installed"] else (
@@ -149,9 +153,13 @@ class TaskCatalog(_Table):
         self.rows = rows
 
     def __repr__(self) -> str:
-        head = ("task", "in SDK", "models (commercial / non-commercial)", "description")
-        lines = [(r["task"], "yes" if r["in_sdk"] else "not yet",
-                  f'{len(r["commercial_models"])} / {len(r["noncommercial_models"])}', r["description"]) for r in self.rows]
+        head = ("task", "in SDK", "models (commercial / non-commercial)", "the SDK runs", "description")
+        lines = []
+        for r in self.rows:
+            com = [m for m in r["commercial_models"] if m in r["sdk_models"]]
+            lines.append((r["task"], "yes" if r["in_sdk"] else "not yet",
+                          f'{len(r["commercial_models"])} / {len(r["noncommercial_models"])}',
+                          f'{len(com)} / {len(r["sdk_models"]) - len(com)}', r["description"]))
         widths = [max(len(str(x)) for x in col) for col in zip(head, *lines)]
         fmt = "  ".join(f"{{:<{w}}}" for w in widths)
         return "\n".join(["Tasks", fmt.format(*head), fmt.format(*("-" * w for w in widths)),
@@ -162,8 +170,11 @@ class TaskCatalog(_Table):
         for r in self.rows:
             status = (_badge("In the SDK", "#0f7b3f", "#e3f5ea") if r["in_sdk"]
                       else _badge("Not in the SDK yet", "#556", "#f0f1f4"))
-            com = ", ".join(html.escape(n) for n in r["commercial_models"]) or "—"
-            nc = ", ".join(html.escape(n) for n in r["noncommercial_models"]) or "—"
+            def names(ms: list[str], sdk: list[str] = r["sdk_models"]) -> str:
+                return ", ".join(html.escape(n) if n in sdk else f"<span style='opacity:.55'>{html.escape(n)}</span>"
+                                 for n in ms) or "—"
+
+            com, nc = names(r["commercial_models"]), names(r["noncommercial_models"])
             body.append(f"<tr><td><b>{html.escape(r['display'])}</b><br><code style='font-size:11px'>{r['task']}</code></td>"
                         f"<td>{status}</td><td>{html.escape(r['description'])}</td>"
                         f"<td style='font-size:12px'>{com}</td><td style='font-size:12px'>{nc}</td></tr>")
@@ -216,6 +227,7 @@ def list_tasks() -> TaskCatalog:
             "task": name, "display": t["display"], "in_sdk": t["in_sdk"], "description": t["description"],
             "commercial_models": [m.name for m in models if m.commercial],
             "noncommercial_models": [m.name for m in models if not m.commercial],
+            "sdk_models": [m.name for m in models if m.runs(name)],
         })
     return TaskCatalog(rows)
 

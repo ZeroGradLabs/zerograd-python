@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "ZeroGrad" }]
-keywords = ["tabular", "foundation-models", "tabpfn", "tabicl", "mitra", "tabdpt", "classification", "automl"]
+keywords = ["tabular", "foundation-models", "tabpfn", "tabicl", "mitra", "tabdpt", "classification", "regression", "automl"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

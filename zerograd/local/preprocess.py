@@ -29,10 +29,11 @@ class Column:
 @dataclass
 class Preprocessor:
     target: str
-    task: str  # "binary" | "multiclass"
-    classes: list[Any]
+    task: str  # "binary" | "multiclass" | "regression"
+    classes: list[Any]  # empty for regression
     columns: list[Column]
     dropped: list[dict[str, str]]
+    target_stats: dict[str, float] = field(default_factory=dict)  # regression: mean, std, min, max of the target
 
     # ---------- fitting ----------
     @classmethod
@@ -45,8 +46,16 @@ class Preprocessor:
         max_columns: int = 100,
         max_classes: int = 10,
         min_rows: int = 20,
+        task: str | None = None,
     ) -> tuple["Preprocessor", pd.DataFrame]:
-        """Profile `df`, decide what to keep, and return the preprocessor plus the rows it kept."""
+        """Profile `df`, decide what to keep, and return the preprocessor plus the rows it kept.
+
+        `task`: "classification", "regression", or None to decide from the target. A numeric target is
+        regression when it has more distinct values than `max_classes` or any value with decimals.
+        """
+        if task not in (None, "classification", "regression"):
+            raise Invalid(f"Unknown task '{task}'. Use 'classification', 'regression' or leave it out.",
+                          code="invalid_task")
         if target not in df.columns:
             raise Invalid(
                 f"Target column '{target}' is not in the data. Columns: {', '.join(map(str, df.columns[:30]))}.",
@@ -57,15 +66,29 @@ class Preprocessor:
             raise Invalid(f"Need at least {min_rows} labeled rows, got {len(df)}.", code="too_few_rows")
 
         y = df[target]
-        classes = sorted(pd.unique(y).tolist(), key=_sort_key)
-        if len(classes) < 2:
-            raise Invalid(f"Target '{target}' has a single value ({classes[0]!r}); nothing to predict.", code="single_class")
-        if len(classes) > max_classes:
-            raise Invalid(
-                f"Target '{target}' has {len(classes)} classes; the limit is {max_classes}. "
-                "Is it a numeric column meant for regression?",
-                code="too_many_classes",
-            )
+        if task is None:
+            task = "regression" if _looks_continuous(y, max_classes) else "classification"
+        stats: dict[str, float] = {}
+        if task == "regression":
+            num = _numeric_target(y, target)
+            if num.nunique() < 2:
+                raise Invalid(f"Target '{target}' has a single value ({num.iloc[0]!r}); nothing to predict.",
+                              code="single_class")
+            classes: list[Any] = []
+            stats = {"mean": float(num.mean()), "std": float(num.std()), "min": float(num.min()),
+                     "max": float(num.max())}
+        else:
+            classes = sorted(pd.unique(y).tolist(), key=_sort_key)
+            if len(classes) < 2:
+                raise Invalid(f"Target '{target}' has a single value ({classes[0]!r}); nothing to predict.",
+                              code="single_class")
+            if len(classes) > max_classes:
+                hint = (" To predict it as a number, pass task='regression'."
+                        if pd.api.types.is_numeric_dtype(y) and not pd.api.types.is_bool_dtype(y) else "")
+                raise Invalid(
+                    f"Target '{target}' has {len(classes)} classes; the limit is {max_classes}.{hint}",
+                    code="too_many_classes",
+                )
 
         drop = set(drop or [])
         dropped: list[dict[str, str]] = []
@@ -89,8 +112,14 @@ class Preprocessor:
                 code="too_many_columns",
             )
 
-        task = "binary" if len(classes) == 2 else "multiclass"
-        return cls(target=target, task=task, classes=classes, columns=columns, dropped=dropped), df
+        if task == "classification":
+            task = "binary" if len(classes) == 2 else "multiclass"
+        return cls(target=target, task=task, classes=classes, columns=columns, dropped=dropped,
+                   target_stats=stats), df
+
+    @property
+    def regression(self) -> bool:
+        return self.task == "regression"
 
     # ---------- applying ----------
     @property
@@ -112,6 +141,8 @@ class Preprocessor:
         return out
 
     def encode_target(self, y: pd.Series) -> np.ndarray:
+        if self.regression:
+            return _numeric_target(y, self.target).to_numpy(dtype=np.float64)
         lookup = {_norm(c): i for i, c in enumerate(self.classes)}
         return np.array([lookup[_norm(v)] for v in y], dtype=np.int64)
 
@@ -129,6 +160,7 @@ class Preprocessor:
             classes=d["classes"],
             columns=[Column(**c) for c in d["columns"]],
             dropped=d["dropped"],
+            target_stats=d.get("target_stats") or {},
         )
 
     def describe(self) -> dict[str, Any]:
@@ -136,6 +168,24 @@ class Preprocessor:
             "used": [{"name": c.name, "kind": c.kind} for c in self.columns],
             "dropped": self.dropped,
         }
+
+
+def _looks_continuous(y: pd.Series, max_classes: int) -> bool:
+    if pd.api.types.is_bool_dtype(y) or not pd.api.types.is_numeric_dtype(y):
+        return False
+    v = y.to_numpy(dtype=np.float64)
+    return y.nunique() > max_classes or bool(np.any(v != np.round(v)))
+
+
+def _numeric_target(y: pd.Series, target: str) -> pd.Series:
+    if pd.api.types.is_bool_dtype(y):
+        raise Invalid(f"Target '{target}' is true/false: that is classification, not regression.", code="invalid_task")
+    num = pd.to_numeric(y, errors="coerce")
+    bad = num.isna() & y.notna()
+    if bad.any():
+        raise Invalid(f"Regression needs a numeric target; '{target}' has values like {y[bad].iloc[0]!r}.",
+                      code="non_numeric_target")
+    return num.astype(np.float64)
 
 
 def _listing(names: list[str], limit: int = 12) -> str:
