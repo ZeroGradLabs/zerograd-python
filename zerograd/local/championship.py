@@ -7,7 +7,8 @@ Same procedure as the ZeroGrad platform, so a local result and a cloud result ar
 2. Build the context from the rest: all of it, or a stratified sample when it is bigger than the limit.
 3. For each model: fit on the context, score the whole holdout, compute the task's metrics and the
    curves the dashboard plots (confusion matrix; ROC and precision-recall for binary tasks).
-4. Champion = best value of the capability's selection metric (default ROC AUC; ties: lower log loss).
+4. Champion = best value of the capability's selection metric (default ROC AUC, or RMSE for regression;
+   ties: lower log loss). Regression splits and samples are stratified on quantile bins of the target.
 5. The capability keeps a fresh context drawn from *all* labeled rows, so production predictions see
    the most history the limit allows.
 """
@@ -27,8 +28,11 @@ from sklearn.metrics import (
     confusion_matrix,
     f1_score,
     log_loss,
+    mean_absolute_error,
+    mean_squared_error,
     precision_recall_curve,
     precision_score,
+    r2_score,
     recall_score,
     roc_auc_score,
     roc_curve,
@@ -42,6 +46,20 @@ Progress = Callable[..., None]  # (stage, fraction, message, eta_s=None)
 # Seconds a model is expected to take on (context rows, holdout rows, features); and a hook to learn from what it took.
 Estimate = Callable[[str, int, int, int], float]
 Observe = Callable[[str, int, int, int, float], None]
+
+
+REGRESSION = "regression"
+
+
+def strata(y: np.ndarray, task: str | None = None, bins: int = 10) -> np.ndarray:
+    """What to stratify on: the labels themselves, or for regression the target's quantile bin (up to `bins`)."""
+    if task != REGRESSION:
+        return y
+    y = np.asarray(y, dtype=np.float64)
+    if len(y) == 0:
+        return np.zeros(0, dtype=np.int64)
+    edges = np.unique(np.quantile(y, np.linspace(0, 1, bins + 1)[1:-1]))
+    return np.searchsorted(edges, y, side="right").astype(np.int64)
 
 
 def stratified_sample(y: np.ndarray, n: int, seed: int = 0) -> np.ndarray:
@@ -93,7 +111,11 @@ def _holdout_split(y: np.ndarray, fraction: float, seed: int) -> tuple[np.ndarra
     return np.flatnonzero(mask), hold_idx
 
 
-def predict_in_chunks(model: FittedModel, X: np.ndarray, chunk: int) -> np.ndarray:
+def predict_in_chunks(model: FittedModel, X: np.ndarray, chunk: int, task: str | None = None) -> np.ndarray:
+    """Class probabilities (n, k), or for regression one prediction per row (n,)."""
+    if task == REGRESSION:
+        parts = [model.predict(X[i : i + chunk]) for i in range(0, len(X), chunk)]
+        return np.concatenate(parts).astype(np.float64) if parts else np.zeros(0)
     parts = [model.predict_proba(X[i : i + chunk]) for i in range(0, len(X), chunk)]
     return np.vstack(parts) if parts else np.zeros((0, 0))
 
@@ -109,15 +131,52 @@ METRICS: dict[str, tuple[str, bool, tuple[str, ...]]] = {
     "precision": ("Precision", True, ("binary",)),
     "recall": ("Recall", True, ("binary",)),
     "f1_macro": ("F1 (macro)", True, ("multiclass",)),
+    "rmse": ("RMSE", False, (REGRESSION,)),
+    "mae": ("MAE", False, (REGRESSION,)),
+    "r2": ("R²", True, (REGRESSION,)),
 }
 DEFAULT_METRIC = "roc_auc"
+REGRESSION_METRIC = "rmse"
 
 
-def check_metric(metric: str | None) -> str:
-    metric = metric or DEFAULT_METRIC
+def default_metric(task: str | None = None) -> str:
+    return REGRESSION_METRIC if task == REGRESSION else DEFAULT_METRIC
+
+
+def check_metric(metric: str | None, task: str | None = None) -> str:
+    """The metric's name, checked; None gives the task's default. With `task`, it must apply to that task."""
+    metric = metric or default_metric(task)
     if metric not in METRICS:
         raise Invalid(f"Unknown metric '{metric}'. Use one of: {', '.join(METRICS)}.", code="invalid_metric")
+    if task is not None and task not in METRICS[metric][2]:
+        fits = [m for m, (_, _, tasks) in METRICS.items() if task in tasks]
+        raise Invalid(f"Metric '{metric}' does not apply to a {task} task. Use one of: {', '.join(fits)}.",
+                      code="invalid_metric")
     return metric
+
+
+def regression_metrics(y: np.ndarray, pred: np.ndarray) -> dict[str, float | None]:
+    y, pred = np.asarray(y, dtype=np.float64), np.asarray(pred, dtype=np.float64)
+    return {
+        "rmse": float(np.sqrt(mean_squared_error(y, pred))),
+        "mae": float(mean_absolute_error(y, pred)),
+        "r2": float(r2_score(y, pred)) if len(y) > 1 else None,
+    }
+
+
+def regression_plots(y: np.ndarray, pred: np.ndarray, n: int = 300, bins: int = 20) -> dict:
+    """Predicted against actual (a sample of up to n points) and a histogram of the errors."""
+    y, pred = np.asarray(y, dtype=np.float64), np.asarray(pred, dtype=np.float64)
+    if len(y) == 0:
+        return {}
+    keep = np.sort(np.random.default_rng(0).choice(len(y), size=min(n, len(y)), replace=False))
+    err = pred - y
+    counts, edges = np.histogram(err, bins=bins)
+    return {
+        "scatter": {"actual": [round(float(v), 6) for v in y[keep]],
+                    "predicted": [round(float(v), 6) for v in pred[keep]]},
+        "residuals": {"edges": [round(float(v), 6) for v in edges], "count": counts.tolist()},
+    }
 
 
 def _clean(proba: np.ndarray) -> np.ndarray:
@@ -246,6 +305,7 @@ def evaluate(
     n_classes: int,
     chunk: int,
     on_rows: Callable[[int, int], None] | None = None,
+    task: str | None = None,
 ) -> Candidate:
     """Fit on the context, then score the holdout in steps so progress can be told in rows.
 
@@ -253,25 +313,36 @@ def evaluate(
     the same as one big predict: each step only runs its own rows against the cached context.
     """
     t0 = time.monotonic()
+    regression = task == REGRESSION
     try:
-        if spec.max_classes is not None and n_classes > spec.max_classes:
-            raise ValueError(f"{spec.display} supports up to {spec.max_classes} classes; this task has {n_classes}")
-        fitted = spec.fit(X_ctx, y_ctx, n_classes, serving=True)
+        if regression:
+            fitted = spec.fit_regressor(X_ctx, y_ctx, serving=True)
+        else:
+            if spec.max_classes is not None and n_classes > spec.max_classes:
+                raise ValueError(f"{spec.display} supports up to {spec.max_classes} classes; this task has {n_classes}")
+            fitted = spec.fit(X_ctx, y_ctx, n_classes, serving=True)
         step = max(1, min(chunk, SCORE_STEP))
         parts, done, total = [], 0, len(X_hold)
         if on_rows:
             on_rows(0, total)
         for i in range(0, total, step):
-            parts.append(fitted.predict_proba(X_hold[i : i + step]))
+            parts.append(fitted.predict(X_hold[i : i + step]) if regression else fitted.predict_proba(X_hold[i : i + step]))
             done = min(total, i + step)
             if on_rows:
                 on_rows(done, total)
+        if regression:
+            pred = np.concatenate(parts) if parts else np.zeros(0)
+            if not np.all(np.isfinite(pred)):
+                raise ValueError("the model returned NaN or infinite predictions")
+            return Candidate(spec.name, spec.display, regression_metrics(y_hold, pred), time.monotonic() - t0,
+                             plots=regression_plots(y_hold, pred))
         proba = np.vstack(parts) if parts else np.zeros((0, n_classes))
         m = metrics(y_hold, proba, n_classes)
         return Candidate(spec.name, spec.display, m, time.monotonic() - t0, plots=plots(y_hold, proba, n_classes))
     except Exception as exc:  # one model failing must not sink the championship
-        return Candidate(spec.name, spec.display, {"roc_auc": None, "accuracy": None, "log_loss": None},
-                         time.monotonic() - t0, error=f"{type(exc).__name__}: {exc}")
+        empty = (dict.fromkeys(("rmse", "mae", "r2")) if regression
+                 else {"roc_auc": None, "accuracy": None, "log_loss": None})
+        return Candidate(spec.name, spec.display, empty, time.monotonic() - t0, error=f"{type(exc).__name__}: {exc}")
 
 
 @dataclass
@@ -284,8 +355,18 @@ class ChampionshipResult:
     baselines: list[Candidate] | None = None
 
 
-def baselines(y_ctx: np.ndarray, y_hold: np.ndarray, n_classes: int) -> list[Candidate]:
-    """What you get without a model, scored on the same holdout: random scores, and always the most common class."""
+def baselines(y_ctx: np.ndarray, y_hold: np.ndarray, n_classes: int, task: str | None = None) -> list[Candidate]:
+    """What you get without a model, scored on the same holdout: random scores, and always the most common class.
+
+    Regression: always the context's mean, and always its median."""
+    if task == REGRESSION:
+        out = []
+        for name, display, value in (("baseline:mean", "Always the average", float(np.mean(y_ctx))),
+                                     ("baseline:median", "Always the median", float(np.median(y_ctx)))):
+            pred = np.full(len(y_hold), value)
+            out.append(Candidate(name, display, regression_metrics(y_hold, pred), 0.0,
+                                 plots=regression_plots(y_hold, pred)))
+        return out
     prior = np.bincount(y_ctx, minlength=n_classes).astype(float)
     prior = (prior + 1e-9) / prior.sum()
     rng = np.random.default_rng(0)
@@ -299,7 +380,8 @@ def baselines(y_ctx: np.ndarray, y_hold: np.ndarray, n_classes: int) -> list[Can
 
 
 def evaluate_all(models: list[ModelSpec], X_ctx, y_ctx, X_hold, y_hold, n_classes: int, chunk: int, progress: Progress,
-                 *, start: float, span: float, estimate: Estimate | None = None, observe: Observe | None = None) -> list[Candidate]:
+                 *, start: float, span: float, estimate: Estimate | None = None, observe: Observe | None = None,
+                 task: str | None = None) -> list[Candidate]:
     """Score every model on the holdout, reporting progress with an estimate of the time left.
 
     The estimate starts from `estimate` (learned from earlier runs) and is rescaled by how this run is going:
@@ -334,7 +416,7 @@ def evaluate_all(models: list[ModelSpec], X_ctx, y_ctx, X_hold, y_hold, n_classe
             progress("evaluate", start + span * i / n, head, round(expected[i] * scale + later_s))
         else:
             progress("evaluate", start + span * i / n, head, None)
-        c = evaluate(spec, X_ctx, y_ctx, X_hold, y_hold, n_classes, chunk, on_rows)
+        c = evaluate(spec, X_ctx, y_ctx, X_hold, y_hold, n_classes, chunk, on_rows, task=task)
         out.append(c)
         if c.error is None and c.seconds:
             if observe:
@@ -355,22 +437,25 @@ def run_championship(
     chunk: int,
     progress: Progress,
     max_holdout_rows: int | None = None,
-    metric: str = DEFAULT_METRIC,
+    metric: str | None = None,
     estimate: Estimate | None = None,
     observe: Observe | None = None,
 ) -> ChampionshipResult:
     if not models:
         raise Invalid("No models to run. Install some with pip install zerograd or pass models=[...].", code="no_models")
+    task = pre.task
+    metric = metric or default_metric(task)
     X = pre.transform(df)
     y = pre.encode_target(df[pre.target])
     n_classes = len(pre.classes)
+    s = strata(y, task)
 
-    train_idx, hold_idx = holdout_split(y, holdout_fraction, max_rows=max_holdout_rows)
-    ctx_idx = train_idx[stratified_sample(y[train_idx], max_context_rows)]
+    train_idx, hold_idx = holdout_split(s, holdout_fraction, max_rows=max_holdout_rows)
+    ctx_idx = train_idx[stratified_sample(s[train_idx], max_context_rows)]
     progress("split", 0.15, f"Context {len(ctx_idx):,} rows · holdout {len(hold_idx):,} rows (all scored)")
 
     candidates = evaluate_all(models, X[ctx_idx], y[ctx_idx], X[hold_idx], y[hold_idx], n_classes, chunk, progress,
-                              start=0.15, span=0.75, estimate=estimate, observe=observe)
+                              start=0.15, span=0.75, estimate=estimate, observe=observe, task=task)
 
     ok = [c for c in candidates if c.error is None]
     if not ok:
@@ -381,11 +466,11 @@ def run_championship(
     champion = max(candidates, key=rank_key(metric))
     progress("select", 0.92, f"Compared {len(ok)} model{'s' if len(ok) > 1 else ''} on the same {len(hold_idx):,} holdout rows")
 
-    final_idx = stratified_sample(y, max_context_rows, seed=1)
+    final_idx = stratified_sample(s, max_context_rows, seed=1)
     return ChampionshipResult(
         champion=champion.model,
         candidates=candidates,
-        baselines=baselines(y[ctx_idx], y[hold_idx], n_classes),
+        baselines=baselines(y[ctx_idx], y[hold_idx], n_classes, task),
         rows={
             "labeled": int(len(y)),
             "evaluation_context": int(len(ctx_idx)),
