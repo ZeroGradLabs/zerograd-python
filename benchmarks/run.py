@@ -30,6 +30,8 @@ from sklearn.model_selection import train_test_split
 os.environ.setdefault("ZEROGRAD_QUIET", "1")
 warnings.filterwarnings("ignore")
 
+from summarize import report  # noqa: E402  (benchmarks/summarize.py)
+
 from zerograd import ZeroGrad  # noqa: E402
 from zerograd.local.championship import stratified_sample  # noqa: E402
 from zerograd.local.preprocess import Preprocessor  # noqa: E402
@@ -107,16 +109,6 @@ def run_one(df: pd.DataFrame, target: str, name: str, seed: int, specs) -> list[
     return rows
 
 
-def _markdown(table: pd.DataFrame) -> str:
-    cols = list(table.columns)
-    lines = ["| dataset | " + " | ".join(cols) + " |", "|---" * (len(cols) + 1) + "|"]
-    for name, row in table.iterrows():
-        best = row.max()
-        cells = [("**%.3f**" % v if v == best else "%.3f" % v) if pd.notna(v) else "—" for v in row]
-        lines.append(f"| {name} | " + " | ".join(cells) + " |")
-    return "\n".join(lines)
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--datasets", nargs="*", type=int, help="OpenML dataset ids (default: the built-in list)")
@@ -144,19 +136,7 @@ def main() -> None:
             results += run_one(df, target, name, seed, specs)
             pd.DataFrame(results).to_csv(args.out, index=False)
 
-    res = pd.DataFrame(results)
-    raw = res.pivot_table(index="dataset", columns="model", values="test_roc_auc", aggfunc="mean")
-    table = raw.round(3)
-    print("\nMean test ROC AUC (higher is better)\n")
-    print(_markdown(table))
-    if "HistGradientBoosting" in table and "ZeroGrad champion" in table:
-        diff = raw["ZeroGrad champion"] - raw["HistGradientBoosting"]
-        print(f"\nZeroGrad champion vs HistGradientBoosting: {int((diff > 0.001).sum())} wins, "
-              f"{int((diff.abs() <= 0.001).sum())} ties, {int((diff < -0.001).sum())} losses "
-              f"(mean difference {diff.mean():+.3f})")
-    errors = res[res["error"].notna()]
-    if len(errors):
-        print(f"\n{len(errors)} model runs failed; see the error column in {args.out}")
+    print("\n" + report(pd.DataFrame(results), args.out))
     print(f"\nAll rows: {args.out}")
 
 
