@@ -1,0 +1,109 @@
+name: Branch cleanup
+
+# Weekly: delete branches that are done, so the branch list only shows work in progress.
+#   * merged: the tip is in main, or is exactly what a merged PR merged (squash merges included).
+#   * closed: the tip is what a PR closed without merging, untouched for STALE_DAYS (restorable from the PR page).
+#   * artifacts/*: copies of a run's artifacts (collect-artifacts.yml), older than ARTIFACT_DAYS.
+# Never touched: main, protected branches, KEEP, and any branch with an open PR.
+# Anything else idle for STALE_DAYS is only listed in the run summary, for a human to decide.
+# Run it by hand from Actions → Branch cleanup → Run workflow; "dry_run" lists without deleting.
+on:
+  schedule:
+    - cron: "0 12 * * 1" # Mondays 09:00 Buenos Aires
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list what would be deleted"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+env:
+  KEEP: "main,oss-stars-data,gh-pages"
+  STALE_DAYS: "14"
+  ARTIFACT_DAYS: "30"
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const dryRun = String(process.env.DRY_RUN) === "true";
+            const keep = new Set(process.env.KEEP.split(",").map((s) => s.trim()));
+            const day = 24 * 3600 * 1000;
+            const staleDays = Number(process.env.STALE_DAYS);
+            const artifactDays = Number(process.env.ARTIFACT_DAYS);
+
+            const { data: info } = await github.rest.repos.get({ owner, repo });
+            keep.add(info.default_branch);
+            const branches = await github.paginate(github.rest.repos.listBranches, { owner, repo, per_page: 100 });
+            const pulls = await github.paginate(github.rest.pulls.list, { owner, repo, state: "all", per_page: 100 });
+            const prsByBranch = {};
+            for (const pr of pulls) {
+              if (pr.head.repo?.full_name !== info.full_name) continue;
+              (prsByBranch[pr.head.ref] ||= []).push(pr);
+            }
+
+            const rows = [];
+            for (const b of branches) {
+              const name = b.name;
+              const sha = b.commit.sha;
+              const prs = prsByBranch[name] || [];
+              const { data: c } = await github.rest.repos.getCommit({ owner, repo, ref: sha });
+              const date = new Date(c.commit.committer.date);
+              const age = Math.floor((Date.now() - date) / day);
+              let action = "keep";
+              let why = "";
+
+              if (keep.has(name) || b.protected) {
+                why = "kept by policy";
+              } else if (prs.some((p) => p.state === "open")) {
+                why = "open PR #" + prs.find((p) => p.state === "open").number;
+              } else {
+                const merged = prs.find((p) => p.merged_at && p.head.sha === sha);
+                const closed = prs.find((p) => !p.merged_at && p.head.sha === sha);
+                const { data: cmp } = await github.rest.repos.compareCommitsWithBasehead({
+                  owner, repo, basehead: `${info.default_branch}...${sha}`, per_page: 1,
+                });
+                if (merged || cmp.ahead_by === 0) {
+                  action = "delete";
+                  why = merged ? `merged in #${merged.number}` : "already in " + info.default_branch;
+                } else if (closed && age >= staleDays) {
+                  action = "delete";
+                  why = `PR #${closed.number} closed without merging, ${age} days idle`;
+                } else if (name.startsWith("artifacts/") && age >= artifactDays) {
+                  action = "delete";
+                  why = `run artifacts, ${age} days old`;
+                } else if (age >= staleDays) {
+                  action = "review";
+                  why = `${cmp.ahead_by} commits not in ${info.default_branch}, ${age} days idle, no PR`;
+                } else {
+                  why = `${cmp.ahead_by} commits not in ${info.default_branch}, active`;
+                }
+              }
+
+              if (action === "delete" && !dryRun) {
+                await github.rest.git.deleteRef({ owner, repo, ref: `heads/${name}` });
+              }
+              rows.push([name, action === "delete" && !dryRun ? "deleted" : action, why, date.toISOString().slice(0, 10)]);
+              core.info(`${action.padEnd(6)} ${name}: ${why}`);
+            }
+
+            const order = { deleted: 0, delete: 0, review: 1, keep: 2 };
+            rows.sort((a, b) => order[a[1]] - order[b[1]] || a[0].localeCompare(b[0]));
+            await core.summary
+              .addHeading(dryRun ? "Branch cleanup (dry run)" : "Branch cleanup")
+              .addTable([
+                [{ data: "Branch", header: true }, { data: "Result", header: true },
+                 { data: "Why", header: true }, { data: "Last commit", header: true }],
+                ...rows,
+              ])
+              .write();
