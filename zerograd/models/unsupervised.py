@@ -64,9 +64,9 @@ def _fomo_state_dict() -> dict:
 
     path = os.environ.get("ZEROGRAD_FOMO0D_PATH")
     if not path:
-        from huggingface_hub import hf_hub_download
+        from ..weights import hub_file
 
-        path = hf_hub_download(repo_id=FOMO_REPO, filename="model.safetensors")
+        path = hub_file(FOMO_REPO, "model.safetensors", model="fomo-0d")
     if path.endswith(".safetensors"):
         from safetensors.torch import load_file
 
@@ -170,6 +170,9 @@ def zeus_path() -> str:
         dest.unlink(missing_ok=True)
         raise RuntimeError("The downloaded ZEUS checkpoint does not match the expected SHA-256, so it was not loaded. "
                            "Download it from github.com/gmum/zeus and set ZEROGRAD_ZEUS_PATH if you trust it.")
+    from ..weights import adopt
+
+    adopt("zeus", dest)  # ZeroGrad's own cache folder, so the file is on its list and remove_weights can delete it
     return str(dest)
 
 
@@ -244,5 +247,5 @@ ZEUS = register_model(ModelSpec(
     fit_fn=None,  # type: ignore[arg-type]
     embed_fn=_zeus_embed,
     check_fn=missing("torch"),
-    extra={"max_rows": ZEUS_ROWS},
+    extra={"max_rows": ZEUS_ROWS, "fetch": zeus_path},  # fetch: weights outside Hugging Face, for zerograd.download
 ))

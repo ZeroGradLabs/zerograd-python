@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import random
 import sys
+import textwrap
 import threading
 import time
 from contextlib import contextmanager
@@ -65,6 +66,12 @@ def fmt_value(v: float) -> str:
     if abs(v) >= 100:
         return f"{v:.1f}"
     return f"{v:.3f}"
+
+
+def error_summary(err: str, limit: int = 300) -> str:
+    """The first line of an error ("RuntimeError: what went wrong"), whole up to `limit` characters."""
+    first = next((ln.strip() for ln in str(err).splitlines() if ln.strip()), "")
+    return first if len(first) <= limit else first[: limit - 1] + "…"
 
 
 def phrase(moment: str) -> str:
@@ -203,7 +210,9 @@ class Console:
         for i, (name, value, err) in enumerate(rows):
             medal = MEDALS[i] if i < len(MEDALS) and err is None else "  "
             if err is not None:
-                self.say(f"  {medal} {name:<{name_w}}  {self.warn('did not finish')} {self.dim(err[:60])}")
+                self.say(f"  {medal} {name:<{name_w}}  {self.warn('did not finish')}")
+                for line in textwrap.wrap(error_summary(err), 76):
+                    self.say(f"     {' ' * name_w}  {self.dim(line)}")
                 continue
             if value is None:
                 self.say(f"  {medal} {name:<{name_w}}  {self.dim('n/a')}")

@@ -110,12 +110,14 @@ class ModelSpec:
 
     def fit(self, X: np.ndarray, y: np.ndarray, n_classes: int, serving: bool = False) -> FittedModel:
         """serving=True keeps the encoded context (KV cache) where the model supports it: faster repeated predicts."""
+        _ensure_weights(self, "classification")
         return self.fit_fn(X, y, n_classes, serving)
 
     def fit_regressor(self, X: np.ndarray, y: np.ndarray, serving: bool = False) -> FittedRegressor:
         """Fit on a numeric target. predict(X) returns one float per row."""
         if self.regress_fn is None:
             raise NotImplementedError(f"{self.display} does not run regression in this version of the SDK")
+        _ensure_weights(self, "regression")
         return Point(self.regress_fn(X, np.asarray(y, dtype=np.float64), serving))
 
     def describe(self) -> dict:
@@ -137,6 +139,15 @@ class ModelSpec:
             "unavailable_reason": reason,
             "install": self.install,
         }
+
+
+def _ensure_weights(spec: ModelSpec, task: str) -> None:
+    """Weights a model is about to need, downloaded through zerograd.weights so they are on its list (and removable)."""
+    if spec.weights_fn is None and spec.regression_weights_fn is None:
+        return
+    from ..weights import ensure
+
+    ensure(spec, task)
 
 
 _REGISTRY: dict[str, ModelSpec] = {}

@@ -73,7 +73,18 @@ pip install "zerograd[all]"           # adds Mitra-v2 and TabDPT
 
 Python 3.10+. A GPU helps but is not required: on CPU, histories up to a few thousand rows take seconds to
 minutes. Weights download from each model's official Hugging Face repository the first time you use it and
-are cached there (`HF_HOME`); ZeroGrad hosts none.
+are cached there (`HF_HOME`); ZeroGrad hosts none. Importing zerograd or building `ZeroGrad()` downloads nothing.
+
+```python
+zerograd.download(["tabpfn-v2"])          # fetch now instead of on first use, e.g. before a demo without wifi
+zerograd.cached_weights()                 # what is on disk, how big, and whether ZeroGrad downloaded it
+zerograd.remove_weights()                 # delete what ZeroGrad downloaded; the next run fetches it again
+zerograd.config(auto_remove_weights=True) # or ZEROGRAD_AUTO_REMOVE_WEIGHTS=1: delete this session's downloads at exit
+```
+
+ZeroGrad keeps a list of the files it downloaded, so `remove_weights` never touches weights another project put in
+your Hugging Face cache. With auto-remove on, the files go when the Python process ends normally (a script
+finishing, a notebook kernel shutting down or restarting), not if it is killed.
 
 ## What models are there?
 

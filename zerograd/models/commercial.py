@@ -41,42 +41,46 @@ def assert_tabpfn_v2_checkpoint(path: str, kind: str = "classifier") -> None:
         )
 
 
+# TabPFN refuses more than 1,000 rows on CPU unless told otherwise; slow beats refusing here. The keyword, not the
+# TABPFN_ALLOW_CPU_LARGE_DATASET variable: tabpfn reads that variable once, when it is first imported, and listing
+# the models already imports it. It also lifts the 10,000-row and 500-column checks; the SDK caps the context at
+# its own limits (max_context_rows, max_columns) before a model sees it.
+TABPFN_LIMITS = {"ignore_pretraining_limits": True}
+
+
 def tabpfn_v2_path(kind: str = "classifier") -> str:
     """ZEROGRAD_TABPFN_V2_PATH (ZEROGRAD_TABPFN_V2_REG_PATH for the regressor), else the official checkpoint in
     your Hugging Face cache (downloaded once)."""
     reg = kind == "regressor"
     path = os.environ.get("ZEROGRAD_TABPFN_V2_REG_PATH" if reg else "ZEROGRAD_TABPFN_V2_PATH")
     if not path:
-        from huggingface_hub import hf_hub_download
+        from ..weights import hub_file
 
-        path = hf_hub_download(repo_id=TABPFN_V2_REG_REPO if reg else TABPFN_V2_REPO,
-                               filename=TABPFN_V2_REG_FILE if reg else TABPFN_V2_FILE)
+        path = hub_file(TABPFN_V2_REG_REPO if reg else TABPFN_V2_REPO, TABPFN_V2_REG_FILE if reg else TABPFN_V2_FILE,
+                        model="tabpfn-v2")
     assert_tabpfn_v2_checkpoint(path, kind)
     return path
 
 
 def _tabpfn_fit(X: np.ndarray, y: np.ndarray, n_classes: int, serving: bool) -> FittedModel:
-    # TabPFN refuses more than 1,000 rows on CPU unless told otherwise; slow beats refusing here.
-    os.environ.setdefault("TABPFN_ALLOW_CPU_LARGE_DATASET", "1")
     from tabpfn import TabPFNClassifier
     from tabpfn.constants import ModelVersion
 
     model = TabPFNClassifier.create_default_for_version(
         ModelVersion.V2, model_path=tabpfn_v2_path(), device=device(), random_state=0,
-        fit_mode="fit_with_cache" if serving else "fit_preprocessors",
+        fit_mode="fit_with_cache" if serving else "fit_preprocessors", **TABPFN_LIMITS,
     )
     model.fit(X, y)
     return Aligned(model, n_classes)
 
 
 def _tabpfn_regress(X: np.ndarray, y: np.ndarray, serving: bool) -> FittedRegressor:
-    os.environ.setdefault("TABPFN_ALLOW_CPU_LARGE_DATASET", "1")
     from tabpfn import TabPFNRegressor
     from tabpfn.constants import ModelVersion
 
     model = TabPFNRegressor.create_default_for_version(
         ModelVersion.V2, model_path=tabpfn_v2_path("regressor"), device=device(), random_state=0,
-        fit_mode="fit_with_cache" if serving else "fit_preprocessors",
+        fit_mode="fit_with_cache" if serving else "fit_preprocessors", **TABPFN_LIMITS,
     )
     model.fit(X, y)
     return Point(model)

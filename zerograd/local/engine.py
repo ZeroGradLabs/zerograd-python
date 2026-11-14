@@ -20,7 +20,7 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
-from .._ui import Console, fmt_value, phrase
+from .._ui import Console, error_summary, fmt_value, phrase
 from .._version import __version__
 from ..curve import ContextCurve, check_sizes
 from ..curve import ms_per_row as _ms_per_row
@@ -52,9 +52,7 @@ class LocalZeroGrad:
         self.specs = resolve_models(self._models, self._noncommercial)  # validates names, shows license notices
         self.progress = progress
         self.ui = Console(progress)
-        names = ", ".join(s.display for s in self.specs)
-        self.ui.greet("local", f"{len(self.specs)} model{'s' if len(self.specs) != 1 else ''} ready: {names}" if self.specs
-                      else 'no models installed yet: pip install zerograd')
+        self.ui.greet("local", _models_line(self.specs))
         self.limits = dict(max_context_rows=max_context_rows, max_holdout_rows=max_holdout_rows,
                            holdout_fraction=holdout_fraction, max_columns=max_columns, max_classes=max_classes,
                            min_rows=min_rows, predict_chunk_rows=predict_chunk_rows)
@@ -349,6 +347,11 @@ class LocalCapability:
             return None
 
     @property
+    def errors(self) -> dict[str, str]:
+        """The whole error message of each model that did not finish, by model name."""
+        return {c["model"]: c["error"] for c in self.candidates if c.get("error")}
+
+    @property
     def evaluation(self) -> pd.DataFrame:
         """The championship: every model scored on the same holdout."""
         df = pd.DataFrame(self.candidates)
@@ -358,6 +361,8 @@ class LocalCapability:
         df = df[cols].rename(columns={"display": "model"}).set_index("model")
         if "error" in df and df["error"].isna().all():
             df = df.drop(columns="error")
+        elif "error" in df:  # the first line, so a table stays readable; the whole message is in `errors`
+            df["error"] = df["error"].map(lambda e: error_summary(e) if isinstance(e, str) else e)
         df.attrs["rows"] = self.rows
         df.attrs["metric"] = self.metric
         return df
@@ -691,25 +696,32 @@ class _Live:
         self._finish()
 
 
+def _models_line(specs: list[ModelSpec]) -> str:
+    """The greeting: "ready" only when the weights are on disk too. Nothing downloads here."""
+    if not specs:
+        return "no models installed yet: pip install zerograd"
+    from ..weights import missing_files
+
+    names = ", ".join(s.display for s in specs)
+    n = f"{len(specs)} model{'s' if len(specs) != 1 else ''}"
+    if any(missing_files(s) for s in specs):
+        return f"{n} installed: {names} · weights download on first use"
+    return f"{n} ready: {names}"
+
+
 def _prefetch(specs: list[ModelSpec], ui: Console, task: str = "classification") -> None:
     """Download missing weights up front, with a clear line, so they never fight with a spinner."""
-    for spec in specs:
-        try:
-            files = spec.weights_for(task)
-            if not files:
-                continue
-            from huggingface_hub import hf_hub_download, try_to_load_from_cache
+    from ..weights import hub_file, missing_files
 
-            todo = [(r, f) for r, f in files if not isinstance(try_to_load_from_cache(r, f), str)]
-        except Exception:
-            continue  # the model reports its own error when it runs
+    for spec in specs:
+        todo = missing_files(spec, task)
         if not todo:
             continue
         ui.say(f"{ui.accent('↓')} {spec.display}: fetching weights from huggingface.co/{todo[0][0]} "
                f"{ui.dim('(first time only) · ' + phrase('download'))}")
         for repo, filename in todo:
             try:
-                hf_hub_download(repo_id=repo, filename=filename)
+                hub_file(repo, filename, model=spec.name)
             except Exception as exc:
                 ui.say(ui.warn(f"  could not download {filename}: {type(exc).__name__}"))
                 break
