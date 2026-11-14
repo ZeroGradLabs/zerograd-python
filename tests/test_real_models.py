@@ -90,5 +90,7 @@ def test_real_zeus_clustering():
     group = rng.integers(0, 3, 300)
     pts = np.array([[0, 0, 0], [6, 6, 0], [0, 6, 6]])[group] + rng.normal(0, 1, (300, 3))
     df = pd.DataFrame(pts, columns=["a", "b", "c"]).assign(group=group)
+    emb = zerograd.models.get_model("zeus").embed_fn(pts.astype(np.float32))  # raises the real error, if any
+    assert emb.shape[0] == 300 and np.all(np.isfinite(emb))
     res = cluster(df, labels="group", models=["zeus", "kmeans"], progress=False)
     assert res.evaluation.loc["zeus", "adjusted_rand"] > 0.8, res.evaluation
