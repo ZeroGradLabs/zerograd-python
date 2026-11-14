@@ -33,6 +33,10 @@ First open source release, Apache 2.0. `pip install zerograd` includes the local
   score and latency. `cap.update(context_rows=n)` predicts with the smaller context.
 * `remote=True` (or an API key) keeps the platform client from 0.1: capabilities with versions, batch runs,
   pipelines, scheduled championships.
+* **Outcomes (platform).** Remote predictions carry a `prediction_id`, and `id_column=` keeps your own id as the
+  reference. `cap.send_outcomes(...)` sends what actually happened (outcome, decision, observed_at) by either one,
+  with a vault if the capability was created with one. `cap.performance(cohort=...)` returns the production
+  metrics per cohort of prediction date, only for cohorts past the capability's `maturity_days`.
 
 ## 0.1.0
 

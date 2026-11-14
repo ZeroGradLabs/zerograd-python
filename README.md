@@ -312,6 +312,16 @@ championships on fresh history, batch pipelines from your bucket, monitoring, th
 Explain and Ask, and workspaces for teams. `zerograd.privacy` (`scan`, `drop_sensitive`, `Vault`) keeps
 personal data on your side before anything is sent. See [zerograd.dev](https://zerograd.dev).
 
+On the platform every prediction has a `prediction_id`. When the real outcomes arrive, weeks or months later,
+send them back and see how each version does in production, by cohort, next to its holdout score:
+
+```python
+preds = cap.predict(applications, id_column="loan_id")    # your own id is kept as the reference
+cap.send_outcomes([{"reference": "L-10293", "outcome": 1, "decision": "approved"}])
+cap.update(maturity_days=90)                               # cohorts count once outcomes had time to happen
+cap.performance(cohort="week")
+```
+
 `remote=None` (the default) picks the platform when an API key is given or `ZEROGRAD_API_KEY` is set;
 pass `remote=False` to stay local.
 
