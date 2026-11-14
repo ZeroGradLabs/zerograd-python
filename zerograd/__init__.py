@@ -8,6 +8,9 @@
 
     zg = ZeroGrad(remote=True)                        # the ZeroGrad platform (ZEROGRAD_API_KEY)
 
+scikit-learn: ZeroGradClassifier / ZeroGradRegressor. Honest evaluation: zg.cross_validate(df, target, groups=, time=).
+Then cap.optimize_threshold("cost", cost_fn=20) and cap.importance(test_df).
+
 No target? zg.anomalies(df), zg.impute(df), zg.synthesize(df) and zg.cluster(df) run locally (zerograd.unsupervised).
 """
 
@@ -25,7 +28,10 @@ from .errors import (
     ValidationError,
     ZeroGradError,
 )
+from .estimators import ZeroGradClassifier, ZeroGradRegressor
 from .local import LocalCapability, LocalZeroGrad, load
+from .local.threshold import ThresholdResult
+from .local.validation import CVResult
 from .models import LicenseGuardError, NonCommercialModelWarning, list_models, list_tasks, model_info, register_model
 from .privacy import SensitiveDataWarning, Vault, drop_sensitive, scan
 from .unsupervised import AnomalyResult, ClusterResult, ImputeResult, SyntheticResult
@@ -37,5 +43,6 @@ __all__ = [
     "RunFailedError", "APIError", "UsageWarning",
     "Vault", "scan", "drop_sensitive", "SensitiveDataWarning",
     "AnomalyResult", "ImputeResult", "SyntheticResult", "ClusterResult",
+    "ZeroGradClassifier", "ZeroGradRegressor", "CVResult", "ThresholdResult",
     "__version__",
 ]
