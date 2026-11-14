@@ -51,6 +51,26 @@ class RemoteZeroGrad:
         return f"<ZeroGrad remote {self.base_url}>"
 
     # ------------------------------------------------------------------ capabilities
+    def _local_only(self, task: str):
+        raise ValidationError(
+            f"{task} runs locally in this version: use ZeroGrad(remote=False). On the platform it is part of ZeroGrad "
+            "Labs; ask us for access.", code="local_only")
+
+    def anomalies(self, *args, **kwargs):
+        self._local_only("Anomaly detection")
+
+    def impute(self, *args, **kwargs):
+        self._local_only("Imputation")
+
+    def synthesize(self, *args, **kwargs):
+        self._local_only("Synthetic data")
+
+    def cross_validate(self, *args, **kwargs):
+        self._local_only("Cross-validation")
+
+    def cluster(self, *args, **kwargs):
+        self._local_only("Clustering")
+
     def create(self, name: str, examples: Table, target: str, *, drop: Iterable[str] | None = None,
                metric: str | None = None, wait: bool = True, sensitive: str = "drop", keep: Iterable[str] = (),
                vault: Vault | None = None, task: str | None = None) -> "Capability | Run":

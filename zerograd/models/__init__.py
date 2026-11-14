@@ -8,6 +8,7 @@
 
 from . import commercial as _commercial  # noqa: F401  (registers the commercial models)
 from . import noncommercial as _noncommercial  # noqa: F401  (registers the non-commercial models, off by default)
+from . import unsupervised as _unsupervised  # noqa: F401  (FoMo-0D and ZEUS: anomaly detection and clustering)
 from .catalog import ModelCatalog, TaskCatalog, list_models, list_tasks, model_info
 from .commercial import LicenseGuardError, assert_tabpfn_v2_checkpoint
 from .registry import (

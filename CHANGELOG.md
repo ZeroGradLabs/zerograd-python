@@ -14,6 +14,17 @@ First open source release, Apache 2.0. `pip install zerograd` includes the local
   name, non-commercial): RMSE (default), MAE and R² on a holdout stratified on deciles of the target, average and
   median baselines, `predict` with one `prediction` column, save and load, context curves with a relative tolerance.
   `task="regression"` or `task="classification"` overrides the detection. Local only for now.
+* **No target.** `zg.anomalies`, `zg.impute`, `zg.synthesize` and `zg.cluster` (also in `zerograd.unsupervised`):
+  anomaly detection with the columns why, imputation after a championship on hidden cells, synthetic rows scored by
+  detection AUC and exact copies, and clustering with segment profiles. TabPFN v2 and TabICLv2 through the chain
+  rule; FoMo-0D (MIT) for anomalies and ZEUS (Apache 2.0) for clustering, both zero-shot, with their inference code
+  vendored. Isolation Forest, LOF, kNN, mean/mode, KNN and iterative imputation, k-means and a Gaussian mixture
+  compete as baselines. Local only for now.
+* **Evaluation and decisions.** `zg.cross_validate` runs every model on k folds, split at random, by group
+  (`groups=`) or by time (`time=`, walking forward), with KS and lift for binary tasks and a baseline;
+  `cap.optimize_threshold` picks the cut by cost, F1, Youden, or recall/precision under a constraint, from the
+  championship holdout; `cap.importance` measures each column by permutation. `ZeroGradClassifier` and
+  `ZeroGradRegressor` put any model inside scikit-learn (pipelines, grid search, `cross_val_score`).
 * **Catalog.** `zerograd.list_models(task=..., commercial=...)` and `zerograd.list_tasks()`, as tables in
   notebooks and terminals, from the same registry the license guards use.
 * **Bring your own model** with `zerograd.register_model`.

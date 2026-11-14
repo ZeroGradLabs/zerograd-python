@@ -13,10 +13,11 @@ def test_lists_every_model_with_filters():
     assert all(r["commercial"] for r in com) and not any(r["commercial"] for r in nc)
     assert len(com) + len(nc) == len(allm)
     assert names.index("tabpfn-v2") < names.index("tabpfn-2.5")  # commercial first
-    assert zerograd.list_models(task="imputation").names() == ["limix-2"]
+    assert set(zerograd.list_models(task="imputation").names()) == {"tabpfn-v2", "tabicl-v2", "limix-2"}
+    assert zerograd.list_models(task="clustering").names() == ["zeus"]
     assert set(zerograd.list_models(remote=True).names()) == {"tabpfn-v2", "tabicl-v2"}
     with pytest.raises(ValueError, match="Unknown task"):
-        zerograd.list_models(task="clustering")
+        zerograd.list_models(task="survival")
 
 
 def test_rows_frames_and_lookups():
@@ -34,13 +35,15 @@ def test_renders_in_terminal_and_notebook():
     assert "NON-COMMERCIAL" in text and "tabpfn-v2" in text and "remote=True" in text
     page = cat._repr_html_()
     assert "Commercial use" in page and "Non-commercial" in page and "<table" in page
-    assert "no models match" in repr(zerograd.list_models(task="imputation", commercial=True))
+    assert "no models match" in repr(zerograd.list_models(task="clustering", commercial=False))
 
 
 def test_tasks():
     tasks = zerograd.list_tasks()
-    assert tasks.names() == ["classification", "regression", "imputation"]
-    assert tasks["classification"]["in_sdk"] and tasks["regression"]["in_sdk"] and not tasks["imputation"]["in_sdk"]
+    assert tasks.names() == ["classification", "regression", "anomaly_detection", "imputation", "synthetic_data",
+                             "clustering"]
+    assert all(tasks[t]["in_sdk"] for t in tasks.names())
+    assert {"tabpfn-v2", "fomo-0d"} <= set(tasks["anomaly_detection"]["sdk_models"])
     assert {"tabpfn-v2", "tabicl-v2", "tabdpt"} <= set(tasks["regression"]["sdk_models"])
     assert "mitra-v2" in tasks["regression"]["commercial_models"] and "mitra-v2" not in tasks["regression"]["sdk_models"]
     assert zerograd.model_info("mitra-v2")["runs_in_sdk"] == ["classification"]
