@@ -153,6 +153,69 @@ class LocalZeroGrad:
     def _nc_names(self) -> list[str]:
         return [] if isinstance(self._noncommercial, bool) else list(self._noncommercial)
 
+    def cross_validate(self, examples: Any, target: str, *, folds: int = 5, groups: str | None = None,
+                       time: str | None = None, gap: int = 0, metric: str | None = None,
+                       drop: Iterable[str] | None = None, task: str | None = None, seed: int = 0):
+        """Every selected model on `folds` folds: the mean and spread of each metric, next to a baseline.
+
+        Split at random (stratified), by group (`groups="customer_id"`: a group never sits on both sides) or by
+        time (`time="date"`: train on the past, score the next block; `gap` rows left out in between). The group
+        and time columns are not used as features. Binary tasks add KS and lift in the top 10%.
+        Returns a CVResult: `.summary` per model, `.folds` per fold, `.best`.
+        """
+        from .._remote import to_frame
+        from .validation import run_cv
+
+        df = to_frame(examples)
+        for col, what in ((groups, "groups"), (time, "time")):
+            if col is not None and col not in df.columns:
+                raise ValidationError(f"{what}='{col}' is not a column of the data.", code="missing_columns")
+        if metric is not None:
+            champ.check_metric(metric)
+        lim = self.limits
+        extra = [c for c in (groups, time) if c is not None]
+        pre, kept = Preprocessor.fit(df, target, drop=list(drop or []) + extra, max_columns=lim["max_columns"],
+                                     max_classes=lim["max_classes"], min_rows=lim["min_rows"], task=task)
+        metric = champ.check_metric(metric, pre.task)
+        g = kept[groups].astype(str).to_numpy() if groups else None
+        t = None
+        if time:
+            ts = pd.to_datetime(kept[time], errors="coerce", utc=True) if not pd.api.types.is_numeric_dtype(
+                kept[time]) else pd.to_numeric(kept[time], errors="coerce")
+            if ts.isna().any():
+                raise ValidationError(f"time='{time}' has {int(ts.isna().sum())} values that are not dates or numbers.",
+                                      code="invalid_time")
+            t = ts.to_numpy()
+        ui = Console(self.progress)
+        specs = self._for_task(pre.task, ui)
+        _prefetch(specs, ui, pre.task)
+        how = "by group" if groups else "by time" if time else "stratified"
+        ui.say(f"{ui.accent('◆')} Cross-validation · {folds} folds {how} · {len(specs)} "
+               f"model{'s' if len(specs) != 1 else ''} · {len(kept):,} rows")
+        state: dict[str, Any] = {}
+
+        def on_fold(k: int, n: int, spec: ModelSpec) -> None:
+            if state.get("k") != k:
+                if state.get("cm"):
+                    state["cm"].__exit__(None, None, None)
+                    ui.done(f"Fold {state['k'] + 1} of {n}")
+                state["k"], state["cm"] = k, ui.spinner(f"Fold {k + 1} of {n}")
+                state["sp"] = state["cm"].__enter__()
+            state["sp"].update(suffix=ui.dim(f" · {spec.display}"))
+
+        try:
+            res = run_cv(pre, kept, specs, folds=folds, groups=g, times=t, gap=gap, metric=metric,
+                         max_context_rows=lim["max_context_rows"], chunk=lim["predict_chunk_rows"], seed=seed,
+                         on_fold=on_fold)
+        finally:
+            if state.get("cm"):
+                state["cm"].__exit__(None, None, None)
+        label = champ.METRICS[metric][0]
+        summ = res.summary
+        ui.podium([(m, summ.loc[m, metric], None) for m in summ.index if not str(m).startswith("baseline:")],
+                  f"mean {label}", None, higher_is_better=champ.METRICS[metric][1])
+        return res
+
     def context_curve(self, examples: Any, target: str, sizes: Iterable[int] | None = None, test: Any = None, *,
                       model: str | None = None, metric: str | None = None, seed: int = 0,
                       tolerance: float | None = None, drop: Iterable[str] | None = None,
@@ -354,6 +417,91 @@ class LocalCapability:
                 raise ValidationError("threshold is a number between 0 and 1.", code="invalid_threshold")
         self.threshold = threshold
         return self
+
+    # ------------------------------------------------------------------ threshold and explanations
+    def optimize_threshold(self, objective: str = "f1", *, cost_fp: float = 1.0, cost_fn: float = 1.0,
+                           min_precision: float | None = None, min_recall: float | None = None,
+                           data: Any = None, apply: bool = True):
+        """Binary tasks: the score cut that is best for `objective`, read off the championship holdout.
+
+        objective: "f1"; "cost" (fewest cost_fp * false positives + cost_fn * false negatives); "youden"
+        (recall minus false positive rate); "recall" (most recall with precision >= min_precision); or "precision"
+        (most precision with recall >= min_recall). `data` (with the target) scores those rows instead.
+        `apply=True` makes it the capability's threshold. Returns a ThresholdResult with the table behind it.
+        """
+        from .threshold import optimize
+
+        if self.pre.task != "binary":
+            raise ValidationError("A threshold only applies to binary capabilities.", code="invalid_threshold")
+        if data is not None:
+            y, score = self._labeled(data)
+            res = optimize(objective, y=y, score=score, cost_fp=cost_fp, cost_fn=cost_fn,
+                           min_precision=min_precision, min_recall=min_recall, source=f"{len(y):,} rows you passed")
+        else:
+            champion = next((c for c in self.candidates if c["model"] == self.champion), {})
+            counts = (champion.get("plots") or {}).get("thresholds")
+            if not counts:
+                raise ValidationError("This capability has no holdout counts to read; pass data= with the target.",
+                                      code="invalid_threshold")
+            res = optimize(objective, counts=counts, cost_fp=cost_fp, cost_fn=cost_fn, min_precision=min_precision,
+                           min_recall=min_recall, source=f"championship holdout ({self.rows.get('holdout', 0):,} rows)")
+        if apply:
+            self._set_threshold(res.threshold)
+        return res
+
+    def importance(self, data: Any, *, metric: str | None = None, repeats: int = 3, max_rows: int = 2000,
+                   seed: int = 0) -> pd.DataFrame:
+        """How much each column matters: shuffle it in `data` (rows with the target) and measure how much the
+        champion's `metric` gets worse. Bigger is more important; near zero, the column could go.
+
+        Pass rows the model has not seen as context (a test set), or the numbers come out optimistic. One
+        prediction pass per column and repeat, on up to `max_rows` rows.
+        """
+        metric = champ.check_metric(metric or self.metric, self.pre.task)
+        y, X = self._labeled(data, raw=True)
+        rng = np.random.default_rng(seed)
+        if len(y) > max_rows:
+            keep = champ.stratified_sample(champ.strata(y, self.task), max_rows, seed=seed)
+            X, y = X[keep], y[keep]
+        model = self._model()
+
+        def value(Xs: np.ndarray) -> float:
+            out = champ.predict_in_chunks(model, Xs, self._chunk, self.task)
+            m = (champ.regression_metrics(y, out) if self.pre.regression else champ.metrics(y, out, len(self.classes)))
+            return champ.score(m, metric) or 0.0  # signed so that bigger is better
+
+        ui = Console(self._progress)
+        names = self.pre.feature_names
+        rows = []
+        with ui.spinner(f"Importance · {len(names)} columns × {repeats} · {len(y):,} rows",
+                        done=f"Importance of {len(names)} columns") as sp:
+            base = value(X)
+            for j, name in enumerate(names):
+                sp.update(suffix=ui.dim(f" · {name}"))
+                drops = []
+                for _ in range(repeats):
+                    Xs = X.copy()
+                    Xs[:, j] = Xs[rng.permutation(len(Xs)), j]
+                    drops.append(base - value(Xs))
+                rows.append({"column": name, "importance": float(np.mean(drops)),
+                             "std": float(np.std(drops, ddof=1)) if repeats > 1 else 0.0})
+        out = pd.DataFrame(rows).set_index("column").sort_values("importance", ascending=False)
+        out.attrs.update(metric=metric, baseline=abs(base), rows=int(len(y)))
+        return out
+
+    def _labeled(self, data: Any, raw: bool = False):
+        """(y, score) for binary, or with raw=True (y, X): rows of `data` that have the target."""
+        from .._remote import to_frame
+
+        t = to_frame(data)
+        target = self.pre.target
+        if target not in t.columns:
+            raise ValidationError(f"data needs the target column '{target}'.", code="missing_target")
+        t = t[t[target].notna()]
+        y, X = self.pre.encode_target(t[target]), self.pre.transform(t)
+        if raw:
+            return y, X
+        return y, champ.predict_in_chunks(self._model(), X, self._chunk)[:, 1]
 
     # ------------------------------------------------------------------ predict
     def predict(self, data: Any, *, threshold: float | None = None) -> pd.DataFrame | dict:

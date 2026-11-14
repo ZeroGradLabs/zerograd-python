@@ -94,3 +94,21 @@ def test_real_zeus_clustering():
     assert emb.shape[0] == 300 and np.all(np.isfinite(emb))
     res = cluster(df, labels="group", models=["zeus", "kmeans"], progress=False)
     assert res.evaluation.loc["zeus", "adjusted_rand"] > 0.8, res.evaluation
+
+
+def test_real_sklearn_estimator_and_cross_validation(monkeypatch):
+    from sklearn.model_selection import cross_val_score
+
+    monkeypatch.delenv("ZEROGRAD_API_KEY", raising=False)
+    df = titanic_like(300)
+    X, y = df.drop(columns="Survived"), df["Survived"]
+    for name in ("tabicl-v2", "tabpfn-v2"):
+        scores = cross_val_score(zerograd.ZeroGradClassifier(model=name), X, y, cv=3, scoring="roc_auc")
+        assert scores.mean() > 0.7, (name, scores)
+    zg = zerograd.ZeroGrad(models=["tabicl-v2"], progress=False)
+    res = zg.cross_validate(df, "Survived", folds=3)
+    assert res.summary.loc["tabicl-v2", "roc_auc"] > 0.7, res
+    cap = zg.create("t", df.iloc[:240], "Survived")
+    assert 0 < cap.optimize_threshold("cost", cost_fn=5).threshold < 1
+    imp = cap.importance(df.iloc[240:], repeats=1)
+    assert len(imp) == len(cap.expected_columns)

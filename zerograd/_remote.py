@@ -65,6 +65,9 @@ class RemoteZeroGrad:
     def synthesize(self, *args, **kwargs):
         self._local_only("Synthetic data")
 
+    def cross_validate(self, *args, **kwargs):
+        self._local_only("Cross-validation")
+
     def cluster(self, *args, **kwargs):
         self._local_only("Clustering")
 

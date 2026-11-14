@@ -20,6 +20,11 @@ First open source release, Apache 2.0. `pip install zerograd` includes the local
   rule; FoMo-0D (MIT) for anomalies and ZEUS (Apache 2.0) for clustering, both zero-shot, with their inference code
   vendored. Isolation Forest, LOF, kNN, mean/mode, KNN and iterative imputation, k-means and a Gaussian mixture
   compete as baselines. Local only for now.
+* **Evaluation and decisions.** `zg.cross_validate` runs every model on k folds, split at random, by group
+  (`groups=`) or by time (`time=`, walking forward), with KS and lift for binary tasks and a baseline;
+  `cap.optimize_threshold` picks the cut by cost, F1, Youden, or recall/precision under a constraint, from the
+  championship holdout; `cap.importance` measures each column by permutation. `ZeroGradClassifier` and
+  `ZeroGradRegressor` put any model inside scikit-learn (pipelines, grid search, `cross_val_score`).
 * **Catalog.** `zerograd.list_models(task=..., commercial=...)` and `zerograd.list_tasks()`, as tables in
   notebooks and terminals, from the same registry the license guards use.
 * **Bring your own model** with `zerograd.register_model`.

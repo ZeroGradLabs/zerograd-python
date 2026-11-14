@@ -175,6 +175,41 @@ deciles of the target, so both see cheap and expensive rows. Context curves work
 tolerance is relative (within 0.5% of the best). Mitra-v2 sits regression out in this version, and the platform
 (`remote=True`) runs classification only for now.
 
+## Evaluate honestly, pick the cut, read the columns
+
+```python
+cv = zg.cross_validate(df, "default", folds=5)                     # stratified k-fold
+cv = zg.cross_validate(df, "default", groups="customer_id")        # a customer never sits on both sides
+cv = zg.cross_validate(df, "default", time="date", gap=30)         # train on the past, score the next block
+cv.summary           # per model: mean metrics, spread, KS and lift in the top 10% (binary), next to a baseline
+cv.folds             # one row per model and fold
+
+cap.optimize_threshold("cost", cost_fp=1, cost_fn=20)     # a missed default costs 20 false alarms
+cap.optimize_threshold("recall", min_precision=0.8)       # catch the most while 8 in 10 flags are right
+cap.importance(test_df)                                   # how much the metric drops when each column is shuffled
+```
+
+A random split rewards a model that remembers a customer or peeks at the future; split by group or by time when
+that is how the model will be used. The group and time columns are left out of the features. `optimize_threshold`
+reads the championship holdout (or `data=` rows with the target), also takes `"f1"`, `"youden"` and `"precision"`
+(with `min_recall`), and sets the capability's threshold unless `apply=False`. `importance` wants rows the model
+did not see as context.
+
+### scikit-learn
+
+```python
+from zerograd import ZeroGradClassifier, ZeroGradRegressor
+from sklearn.model_selection import cross_val_score
+
+clf = ZeroGradClassifier(model="tabicl-v2")       # or tabpfn-v2, mitra-v2, ...; default: the first installed
+cross_val_score(clf, X, y, cv=5, scoring="roc_auc")
+```
+
+The estimators fit by keeping a context (a stratified sample of up to `max_context_rows`, 10,000 by default) and
+predict with it, so they work in a `Pipeline`, `GridSearchCV`, `TunedThresholdClassifierCV` or
+`permutation_importance`. Columns get the same preprocessing as `zg.create`. You pick the model; there is no
+championship inside.
+
 ## No target: anomalies, gaps, synthetic rows, segments
 
 Four tasks need no labels. Each runs on your machine, compares the foundation models with the classic
