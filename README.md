@@ -128,7 +128,7 @@ Pick the competitors with `ZeroGrad(models=["tabpfn-v2", "mitra-v2"])`.
 
 ## Benchmark
 
-We ran 12 OpenML classification datasets and 6 regression datasets, 3 seeds each, on GitHub Actions CPUs. The champion
+We ran 12 OpenML classification datasets and 6 regression datasets, 3 seeds each. The champion
 is picked on the training rows only, and every number below comes from a 20% test split that nothing saw during
 selection. The baseline is scikit-learn's HistGradientBoosting with default settings, and regression also gets Ridge
 as a linear baseline.
@@ -171,7 +171,7 @@ cap.update(context_rows=curve.recommended)       # predict with the smaller, fas
 
 <p align="center"><img src="docs/context-curve.png" width="680" alt="ROC AUC and prediction time against rows of context, Adult census income, TabPFN v2"></p>
 
-On 12,000 rows of the Adult census (TabPFN v2 on a GitHub Actions CPU, 2,000 test rows), 1,000 rows of context score
+On 12,000 rows of the Adult census (TabPFN v2 on CPU, 2,000 test rows), 1,000 rows of context score
 ROC AUC 0.913 against 0.915 with 10,000, and predict about 17× faster (61 vs 1,012 ms per row).
 `python scripts/context_curve_figure.py` reproduces it; [docs/context-curve.csv](docs/context-curve.csv) has the numbers.
 
