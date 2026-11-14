@@ -58,6 +58,7 @@ Open source under Apache 2.0. Try it without installing anything, in Colab:
 
 | Notebook | What it shows | |
 |---|---|---|
+| [Six use cases](examples/use-cases.ipynb) | The whole SDK in one run: churn, house prices, cross-validation and thresholds, anomalies, clustering, and outcomes on the platform with a key | [Open in Colab](https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/use-cases.ipynb) |
 | [Quickstart](examples/quickstart.ipynb) | Model catalog, a championship on breast cancer data, predictions, saving, and a context curve on Adult | [Open in Colab](https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/quickstart.ipynb) |
 | [Titanic](examples/titanic.ipynb) | A championship you check against your own holdout, one-row predictions, how much history you need, multiclass | [Open in Colab](https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/titanic.ipynb) |
 | [Evaluate and decide](examples/evaluation.ipynb) | Cross-validation at random, by customer and by date, a threshold by the cost of each mistake, column importance, scikit-learn | [Open in Colab](https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/evaluation.ipynb) |

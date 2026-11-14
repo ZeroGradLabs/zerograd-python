@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* `examples/use-cases.ipynb` walks the SDK in six use cases on public data, in Colab: churn, house prices,
+  evaluation and thresholds, anomalies, clustering, and outcomes on the platform with an API key.
+
 ## 0.2.1 (2026-11-14)
 
 * `zg.cluster` checks the SHA-256 of the ZEUS checkpoint it downloads and loads it with `weights_only=True`. A file that does not match is deleted and never loaded.
