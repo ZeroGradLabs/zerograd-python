@@ -1,0 +1,19 @@
+dataset,seed,rows,classes,model,test_roc_auc,seconds,error,champion
+qsar-biodeg,0,1055,2,TabPFN v2,0.9316901408450704,93.5,,
+qsar-biodeg,0,1055,2,TabICLv2,0.9379275653923542,33.5,,
+qsar-biodeg,0,1055,2,Mitra-v2,0.937374245472837,107.9,,
+qsar-biodeg,0,1055,2,TabDPT,0.9348088531187122,23.5,,
+qsar-biodeg,0,1055,2,HistGradientBoosting,0.9203219315895371,0.2,,
+qsar-biodeg,0,1055,2,ZeroGrad champion,0.9311871227364185,246.9,,TabPFN v2
+qsar-biodeg,1,1055,2,TabPFN v2,0.9571428571428572,82.6,,
+qsar-biodeg,1,1055,2,TabICLv2,0.96056338028169,29.5,,
+qsar-biodeg,1,1055,2,Mitra-v2,0.9550804828973842,99.3,,
+qsar-biodeg,1,1055,2,TabDPT,0.9656941649899397,18.5,,
+qsar-biodeg,1,1055,2,HistGradientBoosting,0.9378269617706239,0.2,,
+qsar-biodeg,1,1055,2,ZeroGrad champion,0.9561368209255532,269.0,,Mitra-v2
+qsar-biodeg,2,1055,2,TabPFN v2,0.935513078470825,83.1,,
+qsar-biodeg,2,1055,2,TabICLv2,0.9427565392354124,30.6,,
+qsar-biodeg,2,1055,2,Mitra-v2,0.9354627766599598,99.9,,
+qsar-biodeg,2,1055,2,TabDPT,0.9355130784708249,18.8,,
+qsar-biodeg,2,1055,2,HistGradientBoosting,0.9225352112676056,0.2,,
+qsar-biodeg,2,1055,2,ZeroGrad champion,0.9401408450704225,270.6,,Mitra-v2

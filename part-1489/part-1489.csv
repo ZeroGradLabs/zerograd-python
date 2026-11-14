@@ -1,0 +1,19 @@
+dataset,seed,rows,classes,model,test_roc_auc,seconds,error,champion
+phoneme,0,5404,2,TabPFN v2,0.9683881942953408,172.9,,
+phoneme,0,5404,2,TabICLv2,0.9780996581168349,102.9,,
+phoneme,0,5404,2,Mitra-v2,0.9740263762036104,143.1,,
+phoneme,0,5404,2,TabDPT,0.973264571324756,72.7,,
+phoneme,0,5404,2,HistGradientBoosting,0.958462021239698,0.1,,
+phoneme,0,5404,2,ZeroGrad champion,0.9780996581168349,464.3,,TabICLv2
+phoneme,1,5404,2,TabPFN v2,0.9640238162088955,168.1,,
+phoneme,1,5404,2,TabICLv2,0.9764852098369861,92.5,,
+phoneme,1,5404,2,Mitra-v2,0.9710761887459329,132.8,,
+phoneme,1,5404,2,TabDPT,0.9687102581465638,65.3,,
+phoneme,1,5404,2,HistGradientBoosting,0.952805258724627,0.1,,
+phoneme,1,5404,2,ZeroGrad champion,0.9764852098369861,474.4,,TabICLv2
+phoneme,2,5404,2,TabPFN v2,0.9718689613027895,168.6,,
+phoneme,2,5404,2,TabICLv2,0.9811179744661173,94.6,,
+phoneme,2,5404,2,Mitra-v2,0.9744413430888401,140.7,,
+phoneme,2,5404,2,TabDPT,0.9735370868911754,67.2,,
+phoneme,2,5404,2,HistGradientBoosting,0.9554478339141493,0.1,,
+phoneme,2,5404,2,ZeroGrad champion,0.9811179744661173,476.0,,TabICLv2

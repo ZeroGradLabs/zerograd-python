@@ -1,0 +1,19 @@
+dataset,seed,rows,classes,model,test_roc_auc,seconds,error,champion
+Australian,0,690,2,TabPFN v2,0.9388971684053651,21.9,,
+Australian,0,690,2,TabICLv2,0.9399616776665957,9.5,,
+Australian,0,690,2,Mitra-v2,0.9456035767511177,29.3,,
+Australian,0,690,2,TabDPT,0.9406003832233341,13.1,,
+Australian,0,690,2,HistGradientBoosting,0.9376197572918885,0.1,,
+Australian,0,690,2,ZeroGrad champion,0.9448584202682564,62.6,,Mitra-v2
+Australian,1,690,2,TabPFN v2,0.9482648499041941,14.8,,
+Australian,1,690,2,TabICLv2,0.9397487758143496,9.1,,
+Australian,1,690,2,Mitra-v2,0.9519906323185011,20.3,,
+Australian,1,690,2,TabDPT,0.9454971258249947,11.4,,
+Australian,1,690,2,HistGradientBoosting,0.9452842239727486,0.1,,
+Australian,1,690,2,ZeroGrad champion,0.9454971258249947,53.9,,TabDPT
+Australian,2,690,2,TabPFN v2,0.9750904832872046,14.8,,
+Australian,2,690,2,TabICLv2,0.9780711092186503,9.2,,
+Australian,2,690,2,Mitra-v2,0.9755162869916968,20.3,,
+Australian,2,690,2,TabDPT,0.9718969555035128,11.5,,
+Australian,2,690,2,HistGradientBoosting,0.9712582499467746,0.1,,
+Australian,2,690,2,ZeroGrad champion,0.9753033851394507,56.7,,TabPFN v2

@@ -1,0 +1,19 @@
+dataset,seed,rows,classes,model,test_roc_auc,seconds,error,champion
+vehicle,0,846,4,TabPFN v2,0.9730353197150072,37.0,,
+vehicle,0,846,4,TabICLv2,0.9763201208513708,16.3,,
+vehicle,0,846,4,Mitra-v2,0.9730663216991342,49.2,,
+vehicle,0,846,4,TabDPT,0.97330588248557,20.7,,
+vehicle,0,846,4,HistGradientBoosting,0.9239050055846931,0.4,,
+vehicle,0,846,4,ZeroGrad champion,0.9763201208513708,76.8,,TabICLv2
+vehicle,1,846,4,TabPFN v2,0.9664666323260074,29.1,,
+vehicle,1,846,4,TabICLv2,0.978071403422966,12.7,,
+vehicle,1,846,4,Mitra-v2,0.9692854888167388,32.1,,
+vehicle,1,846,4,TabDPT,0.976504064511877,13.9,,
+vehicle,1,846,4,HistGradientBoosting,0.9299446473665224,0.4,,
+vehicle,1,846,4,ZeroGrad champion,0.9664882643398268,98.8,,Mitra-v2
+vehicle,2,846,4,TabPFN v2,0.9741372993326118,28.8,,
+vehicle,2,846,4,TabICLv2,0.9819582544191919,13.0,,
+vehicle,2,846,4,Mitra-v2,0.9785297168109668,32.4,,
+vehicle,2,846,4,TabDPT,0.980950689935065,14.1,,
+vehicle,2,846,4,HistGradientBoosting,0.945302141434954,0.4,,
+vehicle,2,846,4,ZeroGrad champion,0.9819582544191919,79.4,,TabICLv2

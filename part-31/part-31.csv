@@ -1,0 +1,19 @@
+dataset,seed,rows,classes,model,test_roc_auc,seconds,error,champion
+credit-g,0,1000,2,TabPFN v2,0.8384523809523811,45.3,,
+credit-g,0,1000,2,TabICLv2,0.8446428571428571,18.7,,
+credit-g,0,1000,2,Mitra-v2,0.83875,50.7,,
+credit-g,0,1000,2,TabDPT,0.8551190476190478,18.9,,
+credit-g,0,1000,2,HistGradientBoosting,0.8253571428571429,0.1,,
+credit-g,0,1000,2,ZeroGrad champion,0.8456547619047619,127.1,,Mitra-v2
+credit-g,1,1000,2,TabPFN v2,0.7889285714285715,34.3,,
+credit-g,1,1000,2,TabICLv2,0.8097619047619047,15.1,,
+credit-g,1,1000,2,Mitra-v2,0.8250000000000001,42.9,,
+credit-g,1,1000,2,TabDPT,0.8102380952380952,16.9,,
+credit-g,1,1000,2,HistGradientBoosting,0.7858333333333334,0.1,,
+credit-g,1,1000,2,ZeroGrad champion,0.8239880952380952,124.9,,Mitra-v2
+credit-g,2,1000,2,TabPFN v2,0.7036904761904761,34.4,,
+credit-g,2,1000,2,TabICLv2,0.730952380952381,15.2,,
+credit-g,2,1000,2,Mitra-v2,0.7509523809523808,42.7,,
+credit-g,2,1000,2,TabDPT,0.7325000000000002,16.8,,
+credit-g,2,1000,2,HistGradientBoosting,0.6925,0.1,,
+credit-g,2,1000,2,ZeroGrad champion,0.7422619047619047,124.0,,Mitra-v2
