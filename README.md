@@ -100,35 +100,11 @@ In a notebook these render as tables with a badge for commercial and non-commerc
 The full list, with sources and the models that are off by default, is in [MODELS.md](MODELS.md).
 This version runs **classification** (binary and multiclass, up to 10 classes) and **regression** (locally, with
 TabPFN v2, TabICLv2 and TabDPT), plus four tasks with no target: anomaly detection, imputation, synthetic data and
-clustering (below). `zerograd.list_tasks()` shows which models run each task.
-
-## The championship
-
-```python
-cap = zg.create(
-    "titanic-survival",
-    examples="train.csv",          # a DataFrame or a CSV/Parquet path
-    target="Survived",
-    drop=["boat", "body"],         # columns only known after the outcome
-    metric="roc_auc",              # or pr_auc, log_loss, accuracy, balanced_accuracy, f1, precision, recall, f1_macro
-)
-cap.evaluation       # one row per model: metrics on the holdout, seconds, champion
-cap.baselines        # the same holdout scored without a model (random, majority class)
-cap.columns          # which columns were used and why the others were dropped
-```
-
-What happens:
-
-* Columns that cannot help are dropped and reported: identifiers, free text, constant and empty columns.
-* 20% of the labeled rows are held out (stratified) and every holdout row is scored by every model.
-* The context the models read is the rest, or a stratified sample of up to 10,000 rows.
-* The champion keeps a context drawn from all labeled rows for predictions.
-
-Pick the competitors with `ZeroGrad(models=["tabpfn-v2", "mitra-v2"])`.
+clustering. `zerograd.list_tasks()` shows which models run each task.
 
 ## Benchmark
 
-We ran 12 OpenML classification datasets and 6 regression datasets, 3 seeds each, on GitHub Actions CPUs. The champion
+We ran 12 OpenML classification datasets and 6 regression datasets, 3 seeds each. The champion
 is picked on the training rows only, and every number below comes from a 20% test split that nothing saw during
 selection. The baseline is scikit-learn's HistGradientBoosting with default settings, and regression also gets Ridge
 as a linear baseline.
@@ -145,129 +121,21 @@ The one loss is churn, by 0.004 of ROC AUC: TabPFN v2 alone would have won it, b
 model on the training rows. Per-dataset tables for every model are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md), and
 `python benchmarks/run.py` reproduces them.
 
-## Predict
+## What the SDK can do
 
-```python
-preds = cap.predict(new_df)            # DataFrame aligned to new_df's index
-cap.predict({"Pclass": 3, "Sex": "male", "Age": 22, "Fare": 7.25})   # one row -> dict
-cap.update(threshold=0.3)              # binary: score >= 0.3 predicts the positive class
-```
+Everything below is explained, with code, in the [docs](https://zerograd.dev/docs).
 
-## Context size: speed against quality
-
-Foundation models read their context (your labeled rows) on every prediction, so more rows usually score better
-and answer slower. `context_curve` fits one model on growing samples of the context, scores each on the same test
-rows and times it:
-
-```python
-curve = zg.context_curve(train_df, "Survived", test=test_df)   # sizes: 250, 500, 1K, 2K, 5K, 10K... up to all rows
-curve                    # per size: the metric, fit and predict seconds, ms per row, and the recommended size
-curve.recommended        # the smallest context within 0.005 of the best score (tolerance=...)
-curve.plot()             # score and latency on two axes, the recommended size marked (needs matplotlib)
-
-curve = cap.context_curve(test_df)               # the champion, on samples of the capability's own context
-cap.update(context_rows=curve.recommended)       # predict with the smaller, faster context
-```
-
-<p align="center"><img src="docs/context-curve.png" width="680" alt="ROC AUC and prediction time against rows of context, Adult census income, TabPFN v2"></p>
-
-On 12,000 rows of the Adult census (TabPFN v2 on a GitHub Actions CPU, 2,000 test rows), 1,000 rows of context score
-ROC AUC 0.913 against 0.915 with 10,000, and predict about 17× faster (61 vs 1,012 ms per row).
-`python scripts/context_curve_figure.py` reproduces it; [docs/context-curve.csv](docs/context-curve.csv) has the numbers.
-
-Options: `sizes=[...]`, `model="tabicl-v2"` (default: the first selected model), `metric="log_loss"`, `tolerance=0.01`.
-Without `test`, a stratified 20% of the rows is held out. With `remote=True` the curve runs a championship per size
-on the platform and returns the same kind of table.
-
-## Regression
-
-A numeric target with decimals, or with more distinct values than classes allowed (10), is a regression:
-
-```python
-cap = zg.create("prices", examples=listings, target="price")   # or task="regression" to say so
-cap.evaluation       # RMSE, MAE and R² per model on the same holdout; the champion has the lowest RMSE
-cap.baselines        # always the average, always the median
-cap.predict(new_listings)                    # one column: prediction
-cap.predict(one_listing)                     # a dict in, {"prediction": 154230.5} out
-```
-
-`metric="mae"` or `metric="r2"` picks the champion by another metric. The holdout and the context are stratified on
-deciles of the target, so both see cheap and expensive rows. Context curves work the same way; for RMSE and MAE the
-tolerance is relative (within 0.5% of the best). Mitra-v2 sits regression out in this version, and the platform
-(`remote=True`) runs classification only for now.
-
-## Evaluate honestly, pick the cut, read the columns
-
-```python
-cv = zg.cross_validate(df, "default", folds=5)                     # stratified k-fold
-cv = zg.cross_validate(df, "default", groups="customer_id")        # a customer never sits on both sides
-cv = zg.cross_validate(df, "default", time="date", gap=30)         # train on the past, score the next block
-cv.summary           # per model: mean metrics, spread, KS and lift in the top 10% (binary), next to a baseline
-cv.folds             # one row per model and fold
-
-cap.optimize_threshold("cost", cost_fp=1, cost_fn=20)     # a missed default costs 20 false alarms
-cap.optimize_threshold("recall", min_precision=0.8)       # catch the most while 8 in 10 flags are right
-cap.importance(test_df)                                   # how much the metric drops when each column is shuffled
-```
-
-A random split rewards a model that remembers a customer or peeks at the future; split by group or by time when
-that is how the model will be used. The group and time columns are left out of the features. `optimize_threshold`
-reads the championship holdout (or `data=` rows with the target), also takes `"f1"`, `"youden"` and `"precision"`
-(with `min_recall`), and sets the capability's threshold unless `apply=False`. `importance` wants rows the model
-did not see as context.
-
-### scikit-learn
-
-```python
-from zerograd import ZeroGradClassifier, ZeroGradRegressor
-from sklearn.model_selection import cross_val_score
-
-clf = ZeroGradClassifier(model="tabicl-v2")       # or tabpfn-v2, mitra-v2, ...; default: the first installed
-cross_val_score(clf, X, y, cv=5, scoring="roc_auc")
-```
-
-The estimators fit by keeping a context (a stratified sample of up to `max_context_rows`, 10,000 by default) and
-predict with it, so they work in a `Pipeline`, `GridSearchCV`, `TunedThresholdClassifierCV` or
-`permutation_importance`. Columns get the same preprocessing as `zg.create`. You pick the model; there is no
-championship inside.
-
-## No target: anomalies, gaps, synthetic rows, segments
-
-Four tasks need no labels. Each runs on your machine, compares the foundation models with the classic
-scikit-learn method whenever there is something to measure, and says which one won.
-
-```python
-found = zg.anomalies(transactions)           # every row scored; the top 5% flagged
-found.top(10)                                 # the most unusual rows, with the columns that make them unusual
-zg.anomalies(transactions, labels="fraud")    # known cases? a championship by ROC AUC, against Isolation Forest, LOF, kNN
-zg.anomalies(today, reference=last_month)     # score new rows against rows you trust
-
-filled = zg.impute(customers)                 # hide 10% of the known cells, score every model, fill with the champion
-filled.data, filled.filled, filled.evaluation
-
-fake = zg.synthesize(customers, n=5_000)      # new rows; detection AUC near 0.5 = hard to tell from yours
-fake.data, fake.evaluation                    # also the share of exact copies of a real row
-
-groups = zg.cluster(customers)                # k picked between 2 and 10, or cluster(df, k=4)
-groups.labels, groups.profiles                # segment per row, and what sets each segment apart
-```
-
-TabPFN v2 and TabICLv2 do the first three with the chain rule: the probability of a row is the product of
-"how likely is this column, given the ones before it", and each factor is a classification question they answer
-in context (the method of the TabPFN paper, for any classifier in the registry). The same factors say *why* a row
-is unusual. [FoMo-0D](https://arxiv.org/abs/2409.05672) (MIT) detects anomalies zero-shot and
-[ZEUS](https://arxiv.org/abs/2505.10704) (Apache 2.0) embeds rows for clustering zero-shot; both are commercial
-use. Synthetic rows are not anonymous by themselves: check `exact_copies` and drop identifying columns first.
-These run locally for now, not with `remote=True`.
-
-## Save and open
-
-```python
-cap.save("titanic.zg")                 # preprocessing, evaluation and context rows; no weights
-cap = zerograd.load("titanic.zg")
-```
-
-The file holds a sample of your labeled rows as the model's context: treat it like the data itself.
+* **[Championship](https://zerograd.dev/docs#how-it-works):** every model scored on the same holdout of your rows, with the champion and baselines in one table.
+* **[Predictions](https://zerograd.dev/docs#predict):** a DataFrame or a single row in, the prediction, score and probabilities out.
+* **[Classification](https://zerograd.dev/docs#classification) and [regression](https://zerograd.dev/docs#regression):** binary and multiclass (up to 10 classes), or numeric targets, picked automatically.
+* **[Context size](https://zerograd.dev/docs#context-size):** find how many rows of history you need, trading a little quality for much faster predictions.
+* **[Evaluation](https://zerograd.dev/docs#evaluation):** [cross-validation](https://zerograd.dev/docs#cross-validation) at random, by group or by time, [thresholds](https://zerograd.dev/docs#optimize-threshold) chosen by the cost of each mistake, and [column importance](https://zerograd.dev/docs#importance).
+* **[scikit-learn](https://zerograd.dev/docs#sklearn):** `ZeroGradClassifier` and `ZeroGradRegressor` work in pipelines, grid search and `cross_val_score`.
+* **[No target](https://zerograd.dev/docs#no-target):** [anomaly detection](https://zerograd.dev/docs#anomaly-detection) with the columns why, [imputation](https://zerograd.dev/docs#imputation), [synthetic data](https://zerograd.dev/docs#synthetic-data) and [clustering](https://zerograd.dev/docs#clustering).
+* **[Privacy](https://zerograd.dev/docs#privacy):** find and drop sensitive columns, or pseudonymize them with a local vault, before anything leaves your machine.
+* **Save and open:** `cap.save()` writes one file and `zerograd.load()` opens it again.
+* **Bring your own model:** plug any model into the championship with `zerograd.register_model`.
+* **[The ZeroGrad platform](https://zerograd.dev/docs#platform):** with `remote=True` the same code runs on the platform, with versions, scheduled championships, monitoring and batch pipelines.
 
 ## Licenses and attribution
 
@@ -278,58 +146,6 @@ asks you to show **"Built with PriorLabs-TabPFN"**; `cap.attribution` tells you 
 Some newer models are released under non-commercial licenses. They are off by default, can be enabled one by
 one by name for research and evaluation, and never run on the ZeroGrad platform. See
 [MODELS.md](MODELS.md#non-commercial-off-by-default-research-and-evaluation-only) and [TERMS.md](TERMS.md).
-
-## Bring your own model
-
-Anything with `fit` and `predict_proba` can compete (and with `predict`, in regression):
-
-```python
-from zerograd.models import Aligned, ModelSpec, register_model
-
-def fit(X, y, n_classes, serving):
-    model = MyClassifier().fit(X, y)
-    return Aligned(model, n_classes)
-
-register_model(ModelSpec(
-    name="my-model", display="My model", family="mine", license="MIT", license_url="https://...",
-    source="local", commercial=True, install="-", fit_fn=fit, check_fn=lambda: None,
-    regress_fn=lambda X, y, serving: MyRegressor().fit(X, y),   # optional: also compete in regression
-))
-ZeroGrad(models=["tabpfn-v2", "my-model"])
-```
-
-## The ZeroGrad platform (`remote=True`)
-
-The same calls run on the ZeroGrad platform with an API key:
-
-```python
-zg = ZeroGrad(remote=True)             # reads ZEROGRAD_API_KEY; an API key alone also selects it
-cap = zg.create("churn", examples=history, target="churned")
-```
-
-The platform adds what a team needs to run predictions in production: managed GPU inference with SLAs, versions and promotion, scheduled
-championships on fresh history, batch pipelines from your bucket, monitoring, thresholds chosen by cost,
-Explain and Ask, and workspaces for teams. `zerograd.privacy` (`scan`, `drop_sensitive`, `Vault`) keeps
-personal data on your side before anything is sent. See [zerograd.dev](https://zerograd.dev).
-
-On the platform every prediction has a `prediction_id`. When the real outcomes arrive, weeks or months later,
-send them back and see how each version does in production, by cohort, next to its holdout score:
-
-```python
-preds = cap.predict(applications, id_column="loan_id")    # your own id is kept as the reference
-cap.send_outcomes([{"reference": "L-10293", "outcome": 1, "decision": "approved"}])
-cap.update(maturity_days=90)                               # cohorts count once outcomes had time to happen
-cap.performance(cohort="week")
-```
-
-`remote=None` (the default) picks the platform when an API key is given or `ZEROGRAD_API_KEY` is set;
-pass `remote=False` to stay local.
-
-## Output
-
-The SDK talks on stderr: a greeting, a spinner per model, a podium at the end. Off a terminal (CI, logs) it prints
-plain lines; `progress=False` or `ZEROGRAD_QUIET=1` silences it, and `NO_COLOR` turns colors off. License warnings
-are never silenced.
 
 ## Development
 

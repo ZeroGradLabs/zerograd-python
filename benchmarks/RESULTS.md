@@ -1,6 +1,6 @@
 # Benchmark results
 
-Run 43517506303 of `.github/workflows/benchmark.yml` (2026-11-14), GitHub Actions CPU runners, 3 seeds per dataset,
+Run of 2026-11-14 on CPU, 3 seeds per dataset,
 `python benchmarks/run.py --datasets <id> --seeds 3`. Each value is the mean over seeds on a 20% test split that nothing
 saw during selection. Bold is the best value per dataset. Training rows are capped at 10,000 per model.
 
