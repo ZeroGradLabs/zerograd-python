@@ -29,6 +29,7 @@ from .errors import (
     ZeroGradError,
 )
 from .estimators import ZeroGradClassifier, ZeroGradRegressor
+from .install import install_model
 from .local import LocalCapability, LocalZeroGrad, load
 from .local.threshold import ThresholdResult
 from .local.validation import CVResult
@@ -45,6 +46,6 @@ __all__ = [
     "Vault", "scan", "drop_sensitive", "SensitiveDataWarning",
     "AnomalyResult", "ImputeResult", "SyntheticResult", "ClusterResult",
     "ZeroGradClassifier", "ZeroGradRegressor", "CVResult", "ThresholdResult",
-    "download", "cached_weights", "remove_weights", "config",
+    "download", "cached_weights", "remove_weights", "config", "install_model",
     "__version__",
 ]

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.3 (2026-11-14)
+
+* **Install a model from Python.** `zerograd.install_model(name)` runs the model's fixed recipe (pip, pip from git,
+  or git clone and pip install -e) with this Python's pip, so it works in notebooks and Colab. Non-commercial models
+  need `accept_license=True` and stay off until named in `noncommercial=[...]`; `dry_run=True` shows the commands;
+  LimiX-2 checks for Python 3.12+.
+* **Classification report.** `cap.classification_report()` (precision, recall, F1, support per class, accuracy, macro
+  and weighted averages) on the championship holdout or on rows you pass, at the capability's threshold.
+* **Context curves.** `curve.plot()` draws the score and the time per row as two charts side by side instead of one
+  with two y axes. A smaller context is only recommended if it also predicted at least 10% faster than the
+  best-scoring one in that run; before, a noisy timing could recommend a smaller context that was slower, with a
+  summary saying it was faster.
+* **Quieter downloads.** Hugging Face's "unauthenticated requests, set a HF_TOKEN" notice is hidden while ZeroGrad
+  downloads public weights (`ZEROGRAD_SHOW_HF_WARNINGS=1` shows it).
+* **Executed notebooks.** A workflow runs the notebooks in `examples/` on CPU (on demand and on each release) and
+  opens a pull request with their outputs, so the results show on GitHub.
+
 ## 0.2.2 (2026-11-14)
 
 * **TabPFN v2 on CPU with more than 1,000 rows.** It failed with "Running on CPU with more than 1000 samples is not

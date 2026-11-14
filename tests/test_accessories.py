@@ -184,3 +184,44 @@ def test_threshold_only_for_binary(toy_models):
         reg.optimize_threshold()
     imp = reg.importance(df[["ratio", "noise", "amount"]], repeats=1)
     assert imp.index[0] == "ratio" and imp.attrs["metric"] == "rmse"
+
+
+def test_classification_report_matches_scikit_learn(cap):
+    from sklearn.metrics import classification_report
+
+    cap, df = cap
+    rows = df.drop(columns=["amount", "customer", "date"]).iloc[600:]
+    rep = cap.classification_report(rows)
+    assert list(rep.columns) == ["precision", "recall", "f1-score", "support"]
+    assert list(rep.index[-3:]) == ["accuracy", "macro avg", "weighted avg"]
+    pred = cap.predict(rows.drop(columns="default"))["prediction"]
+    ref = classification_report(rows["default"].astype(str), pred.astype(str), output_dict=True, zero_division=0)
+    for label in ("0", "1", "macro avg", "weighted avg"):
+        assert rep.loc[label, "f1-score"] == pytest.approx(ref[label]["f1-score"])
+        assert rep.loc[label, "support"] == ref[label]["support"]
+    assert rep.loc["accuracy", "f1-score"] == pytest.approx(ref["accuracy"])
+
+
+def test_classification_report_follows_the_threshold(cap):
+    cap, _ = cap
+    at_half = cap.classification_report()
+    assert at_half.attrs["threshold"] == 0.5 and "holdout" in at_half.attrs["source"]
+    cap.optimize_threshold("cost", cost_fp=1, cost_fn=20)
+    tuned = cap.classification_report()
+    assert tuned.attrs["threshold"] == cap.threshold
+    assert tuned.loc["1", "recall"] >= at_half.loc["1", "recall"]  # missing a default costs more: flag more
+    assert cap.classification_report(threshold=0.99).loc["1", "recall"] <= tuned.loc["1", "recall"]
+
+
+def test_report_from_a_multiclass_confusion_matrix():
+    from sklearn.metrics import classification_report, confusion_matrix
+
+    from zerograd.local.report import from_confusion
+
+    y = np.array([0, 0, 1, 1, 1, 2, 2, 2, 2, 0])
+    p = np.array([0, 1, 1, 1, 2, 2, 2, 0, 2, 0])
+    rep = from_confusion(confusion_matrix(y, p), ["a", "b", "c"])
+    ref = classification_report(y, p, target_names=["a", "b", "c"], output_dict=True, zero_division=0)
+    for label in ("a", "b", "c", "macro avg", "weighted avg"):
+        for col in ("precision", "recall", "f1-score"):
+            assert rep.loc[label, col] == pytest.approx(ref[label][col])
