@@ -181,8 +181,11 @@ def _zeus_model():
     ckpt = torch.load(zeus_path(), map_location="cpu", weights_only=False)
     state = ckpt.get("model", ckpt)
     result = net.load_state_dict(state, strict=False)
-    if result.missing_keys:  # the authors load with strict=False; we only tolerate extra keys, never missing ones
-        raise RuntimeError(f"The ZEUS checkpoint does not match the model: missing {result.missing_keys[:5]}")
+    # The authors load with strict=False. The checkpoint has no last decoder layer, which embedding never uses
+    # (it reads the encoder output), so only decoder keys may be missing.
+    missing_keys = [k for k in result.missing_keys if not k.startswith("decoder.")]
+    if missing_keys:
+        raise RuntimeError(f"The ZEUS checkpoint does not match the model: missing {missing_keys[:5]}")
     return net.eval().to(device()), torch
 
 
