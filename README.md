@@ -71,6 +71,17 @@ pip install zerograd                  # local engine with TabPFN v2 and TabICLv2
 pip install "zerograd[all]"           # adds Mitra-v2 and TabDPT
 ```
 
+Or install one model's own package from Python, from a fixed recipe, into the Python you're running (a notebook
+kernel or Colab included):
+
+```python
+zerograd.install_model("tabdpt")                          # commercial, optional
+zerograd.install_model("limix-2", accept_license=True)    # non-commercial: read its license first (Python 3.12+)
+zerograd.install_model("exaone-tabular", dry_run=True)    # only print the commands
+```
+
+Installing a non-commercial model doesn't turn it on: it still runs only when you name it in `noncommercial=[...]`.
+
 Python 3.10+. A GPU helps but is not required: on CPU, histories up to a few thousand rows take seconds to
 minutes. Weights download from each model's official Hugging Face repository the first time you use it and
 are cached there (`HF_HOME`); ZeroGrad hosts none. Importing zerograd or building `ZeroGrad()` downloads nothing.
@@ -142,6 +153,7 @@ Everything below is explained, with code, in the [docs](https://zerograd.dev/doc
 * **[Classification](https://zerograd.dev/docs#classification) and [regression](https://zerograd.dev/docs#regression):** binary and multiclass (up to 10 classes), or numeric targets, picked automatically.
 * **[Context size](https://zerograd.dev/docs#context-size):** find how many rows of history you need, trading a little quality for much faster predictions.
 * **[Evaluation](https://zerograd.dev/docs#evaluation):** [cross-validation](https://zerograd.dev/docs#cross-validation) at random, by group or by time, [thresholds](https://zerograd.dev/docs#optimize-threshold) chosen by the cost of each mistake, and [column importance](https://zerograd.dev/docs#importance).
+* **Classification report:** `cap.classification_report()` gives precision, recall, F1 and support per class, as in scikit-learn, on the holdout or on rows you pass, at the threshold the capability uses.
 * **[scikit-learn](https://zerograd.dev/docs#sklearn):** `ZeroGradClassifier` and `ZeroGradRegressor` work in pipelines, grid search and `cross_val_score`.
 * **[No target](https://zerograd.dev/docs#no-target):** [anomaly detection](https://zerograd.dev/docs#anomaly-detection) with the columns why, [imputation](https://zerograd.dev/docs#imputation), [synthetic data](https://zerograd.dev/docs#synthetic-data) and [clustering](https://zerograd.dev/docs#clustering).
 * **[Privacy](https://zerograd.dev/docs#privacy):** find and drop sensitive columns, or pseudonymize them with a local vault, before anything leaves your machine.

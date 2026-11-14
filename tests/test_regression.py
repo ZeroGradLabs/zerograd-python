@@ -114,7 +114,8 @@ def test_regression_context_curve(zg):
     curve = zg.context_curve(df, "price", sizes=[30, 100, 400])
     assert curve.metric == "rmse" and not curve.higher_is_better and curve.relative
     assert curve.tolerance == 0.005 and list(curve.index) == [30, 100, 400]
-    assert curve.recommended in (100, 400) and "within 0.5% of the best" in curve.summary()
+    assert curve.recommended in (100, 400) and "rows of context" in curve.summary()
+    assert ("within 0.5% of the best" in curve.summary()) == (curve.recommended == 100)
     cap = zg.create("prices", examples=df.iloc[:600], target="price")
     c2 = cap.context_curve(df.iloc[600:], sizes=[50, 200], metric="mae")
     assert c2.metric == "mae" and c2["mae"].notna().all()

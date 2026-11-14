@@ -16,10 +16,13 @@ from __future__ import annotations
 
 import atexit
 import json
+import logging
 import os
 import shutil
 import threading
 import time
+import warnings
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
 
@@ -121,9 +124,28 @@ def hub_file(repo: str, filename: str, *, model: str | None = None) -> str:
     cached = _hub_cached(repo, filename)
     if cached:
         return cached
-    path = hf_hub_download(repo_id=repo, filename=filename)
+    with quiet_hub():
+        path = hf_hub_download(repo_id=repo, filename=filename)
     record(model or repo, path, repo=repo, filename=filename)
     return path
+
+
+@contextmanager
+def quiet_hub():
+    """Hide Hugging Face's "unauthenticated requests, set a HF_TOKEN" notice during a download (public weights need no
+    token). Errors still show; ZEROGRAD_SHOW_HF_WARNINGS=1 keeps every message."""
+    if os.environ.get("ZEROGRAD_SHOW_HF_WARNINGS", "").strip().lower() in _TRUE:
+        yield
+        return
+    log = logging.getLogger("huggingface_hub")
+    level = log.level
+    log.setLevel(max(level, logging.ERROR))
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*(unauthenticated|HF_TOKEN).*")
+            yield
+    finally:
+        log.setLevel(level)
 
 
 def _hub_cached(repo: str, filename: str) -> str | None:
@@ -178,7 +200,10 @@ def download(models: Iterable[str] | str | None = None, *, task: str | None = No
     for spec in specs:
         reason = spec.unavailable_reason()
         if reason:
-            ui.say(ui.warn(f"{spec.display}: {reason} ({spec.install})"))
+            from .install import RECIPES
+
+            how = f"zerograd.install_model({spec.name!r})" if spec.name in RECIPES else spec.install
+            ui.say(ui.warn(f"{spec.display}: {reason} ({how})"))
             continue
         todo = list(dict.fromkeys(pair for t in tasks if _runs(spec, t) for pair in missing_files(spec, t)))
         fetch = spec.extra.get("fetch")

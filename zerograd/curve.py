@@ -3,7 +3,8 @@
 Tabular foundation models read their context (your labeled rows) on every prediction, so a bigger context
 usually means a better score and a slower answer. A context curve fits the same model on growing stratified
 samples of the context, scores each on the same holdout, and times it. The recommended size is the smallest
-one whose score is within `tolerance` of the best.
+one whose score is within `tolerance` of the best and that predicted measurably faster than the best one (at
+least 10% less time per row in that run); when no smaller size was faster, it is the best-scoring size.
 
     curve = zg.context_curve(train, "churned")            # local: any table, any installed model
     curve = cap.context_curve(test)                       # a capability: its champion, its own context
@@ -30,6 +31,7 @@ _LABELS = {
     "precision": ("Precision", True), "recall": ("Recall", True), "f1_macro": ("F1 (macro)", True),
     "rmse": ("RMSE", False), "mae": ("MAE", False), "r2": ("R²", True),
 }
+MIN_SPEEDUP = 0.10  # a smaller context is only worth it if it predicted at least 10% faster in the same run
 _RELATIVE = {"rmse", "mae"}  # unbounded, in the target's unit: tolerance is a share of the best value
 _ACCENT = "#6c63ff"  # ZeroGrad violet
 _MUTED = "#8a8f87"
@@ -111,33 +113,62 @@ class ContextCurve(pd.DataFrame):
 
     @property
     def recommended(self) -> int | None:
-        """The smallest context within `tolerance` of the best score."""
+        """The smallest context within `tolerance` of the best score that also predicted measurably faster than the
+        best-scoring one. Timings are from one run and can be noisy (on a GPU above all), so a smaller size that
+        was not at least 10% faster is not recommended: the best-scoring size is."""
+        return self._pick()[0]
+
+    def _pick(self) -> tuple[int | None, int | None, list[int]]:
+        """(recommended, best-scoring size, sizes within tolerance), by score and then by measured speed."""
         if self.metric not in self:
-            return None
-        rec = recommend(self[self.metric].tolist(), self.index.tolist(), higher_is_better=self.higher_is_better,
-                        tolerance=self.tolerance, relative=self.relative)
-        return int(rec) if rec is not None else None
+            return None, None, []
+        scores = self[self.metric]
+        valid = scores.dropna()
+        if valid.empty:
+            return None, None, []
+        best_rows = int(valid.idxmax() if self.higher_is_better else valid.idxmin())
+        best = float(valid.loc[best_rows])
+        room = self.tolerance * abs(best) if self.relative else self.tolerance
+        ok = sorted(int(r) for r, v in valid.items()
+                    if (best - v if self.higher_is_better else v - best) <= room + 1e-12)
+        if "ms_per_row" not in self:
+            return ok[0], best_rows, ok
+        ms = self["ms_per_row"]
+        slow = ms.get(best_rows)
+        if slow is None or _isnan(slow) or slow <= 0:
+            return ok[0], best_rows, ok
+        for rows in ok:
+            if rows >= best_rows:
+                break
+            fast = ms.get(rows)
+            if fast is not None and not _isnan(fast) and fast <= (1 - MIN_SPEEDUP) * slow:
+                return rows, best_rows, ok
+        return best_rows, best_rows, ok
 
     def summary(self) -> str:
-        rec = self.recommended
+        rec, best_rows, ok = self._pick()
         if rec is None:
             return "No size produced a score."
-        best_rows = self[self.metric].idxmax() if self.higher_is_better else self[self.metric].idxmin()
         best, got = self.loc[best_rows, self.metric], self.loc[rec, self.metric]
         within = f"{self.tolerance:.1%}".replace(".0%", "%") if self.relative else f"{self.tolerance:g}"
-        text = (f"{rec:,} rows of context score {self.metric_label} {_fmt(got)}, "
-                f"within {within} of the best ({_fmt(best)} with {int(best_rows):,} rows)")
-        if "ms_per_row" in self and rec != best_rows:
+        if rec != best_rows:
             fast, slow = self.loc[rec, "ms_per_row"], self.loc[best_rows, "ms_per_row"]
-            if fast > 0 and slow > 0:
-                text += f", and predict {slow / fast:.1f}× faster ({fast:.2f} vs {slow:.2f} ms per row)"
+            return (f"{rec:,} rows of context score {self.metric_label} {_fmt(got)}, within {within} of the best "
+                    f"({_fmt(best)} with {best_rows:,} rows), and predicted {slow / fast:.1f}× faster in this run "
+                    f"({fast:.2f} vs {slow:.2f} ms per row).")
+        text = f"{best_rows:,} rows of context score best ({self.metric_label} {_fmt(best)})"
+        smaller = [r for r in ok if r < best_rows]
+        if smaller:
+            text += (f". Smaller contexts from {smaller[0]:,} rows score within {within}, but none predicted "
+                     f"measurably faster in this run, so there is nothing to gain from shrinking it")
         return text + "."
 
     # ------------------------------------------------------------------ showing it
     def plot(self, ax: Any = None, *, title: str | None = None, **kwargs: Any):
-        """Score (left axis) and prediction latency (right axis) against context rows; the pick is marked.
+        """Two charts side by side: the score, and the prediction time per row, against context rows; the pick is marked.
 
-        Needs matplotlib (`pip install matplotlib`, already in Colab and Jupyter setups). Returns the axes.
+        Needs matplotlib (`pip install matplotlib`, already in Colab and Jupyter setups). Returns the score's axes
+        (the time chart is next to it, in the same figure). With `ax=`, only the score is drawn there.
         Any other keyword (y=, kind=, ylim=, ...) draws pandas' regular DataFrame.plot instead.
         """
         if kwargs:
@@ -148,43 +179,48 @@ class ContextCurve(pd.DataFrame):
         except ImportError as exc:  # pragma: no cover - depends on the environment
             raise ImportError("ContextCurve.plot needs matplotlib: pip install matplotlib") from exc
 
+        timed = "ms_per_row" in self and self["ms_per_row"].notna().any()
+        ax_ms = None
         if ax is None:
-            _, ax = plt.subplots(figsize=(8, 4.2))
+            if timed:
+                _, (ax, ax_ms) = plt.subplots(1, 2, figsize=(12, 4.2))
+            else:
+                _, ax = plt.subplots(figsize=(7, 4.2))
         x = self.index.to_numpy()
         y = self[self.metric].to_numpy(dtype=float)
-        ax.plot(x, y, color=_ACCENT, marker="o", lw=2.2, ms=6, label=self.metric_label, zorder=3)
-        ax.set_xscale("log")
-        ax.set_xticks(x)
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: _short(v)))
-        ax.xaxis.set_minor_formatter(FuncFormatter(lambda v, _: ""))
-        ax.set_xlabel("Rows of context")
-        ax.set_ylabel(self.metric_label, color=_ACCENT)
-        ax.tick_params(axis="y", colors=_ACCENT)
-        for side in ("top",):
-            ax.spines[side].set_visible(False)
-        ax.grid(True, axis="y", alpha=0.25)
-
-        handles = ax.get_lines()[:1]
-        if "ms_per_row" in self and self["ms_per_row"].notna().any():
-            ax2 = ax.twinx()
-            ax2.plot(x, self["ms_per_row"].to_numpy(dtype=float), color=_MUTED, marker="s", ms=4, lw=1.6, ls="--",
-                     label="Prediction time (ms per row)")
-            ax2.set_ylabel("ms per row", color=_MUTED)
-            ax2.tick_params(axis="y", colors=_MUTED)
-            ax2.spines["top"].set_visible(False)
-            ax2.set_ylim(bottom=0)
-            handles = handles + ax2.get_lines()[:1]
+        ax.plot(x, y, color=_ACCENT, marker="o", lw=2.2, ms=6, zorder=3)
+        for a, label in ((ax, self.metric_label), (ax_ms, "ms per row")):
+            if a is None:
+                continue
+            a.set_xscale("log")
+            a.set_xticks(x)
+            a.xaxis.set_major_formatter(FuncFormatter(lambda v, _: _short(v)))
+            a.xaxis.set_minor_formatter(FuncFormatter(lambda v, _: ""))
+            a.set_xlabel("Rows of context")
+            a.set_ylabel(label)
+            a.spines["top"].set_visible(False)
+            a.spines["right"].set_visible(False)
+            a.grid(True, axis="y", alpha=0.25)
+        if ax_ms is not None:
+            ax_ms.plot(x, self["ms_per_row"].to_numpy(dtype=float), color=_MUTED, marker="s", ms=5, lw=1.8)
+            ax_ms.set_ylim(bottom=0)
+            ax_ms.set_title("Prediction time per row (one run; noisy on small sizes)", fontsize=11, loc="left")
 
         rec = self.recommended
         if rec is not None:
             ry = float(self.loc[rec, self.metric])
             ax.axvline(rec, color=_ACCENT, alpha=0.35, lw=1, ls=":")
             ax.scatter([rec], [ry], s=170, facecolors="none", edgecolors=_ACCENT, lw=2, zorder=4)
-            ax.annotate(f"recommended: {rec:,} rows", (rec, ry), xytext=(8, -18), textcoords="offset points",
+            last = rec == int(self.index.max())  # at the right edge the label goes to the left of the point
+            ax.annotate(f"recommended: {rec:,} rows", (rec, ry), xytext=(-8 if last else 8, -18),
+                        textcoords="offset points", ha="right" if last else "left",
                         color=_ACCENT, fontsize=9, fontweight="bold")
-        ax.legend(handles=handles, loc="lower right", frameon=False, fontsize=9)
+            if ax_ms is not None:
+                ax_ms.axvline(rec, color=_ACCENT, alpha=0.35, lw=1, ls=":")
         model = f" · {self.model}" if self.model else ""
-        ax.set_title(title or f"Context size vs {self.metric_label} and speed{model}", fontsize=11, loc="left")
+        ax.set_title(title or f"Context size vs {self.metric_label}{model}", fontsize=11, loc="left")
+        if ax_ms is not None:
+            ax.figure.tight_layout()
         return ax
 
     def _repr_html_(self) -> str:

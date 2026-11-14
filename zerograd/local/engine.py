@@ -454,6 +454,42 @@ class LocalCapability:
             self._set_threshold(res.threshold)
         return res
 
+    def classification_report(self, data: Any = None, *, threshold: float | None = None) -> pd.DataFrame:
+        """Precision, recall, F1 and support per class, plus accuracy, macro and weighted averages, like
+        scikit-learn's classification_report, as a DataFrame.
+
+        Read off the championship holdout, or off `data` (rows with the target) if you pass it. Binary tasks cut
+        the score at `threshold`, else at the capability's threshold (`optimize_threshold`), else at 0.5.
+        """
+        from sklearn.metrics import confusion_matrix
+
+        from .report import binary_confusion, from_confusion
+
+        if self.pre.regression:
+            raise ValidationError("A classification report needs a classification capability; this one is a "
+                                  "regression.", code="unsupported_task")
+        cut = threshold if threshold is not None else (self.threshold if self.threshold is not None else 0.5)
+        binary = self.pre.task == "binary"
+        if data is not None:
+            y, X = self._labeled(data, raw=True)
+            proba = champ.predict_in_chunks(self._model(), X, self._chunk)
+            pred = (proba[:, 1] >= cut).astype(int) if binary else proba.argmax(axis=1)
+            cm = confusion_matrix(y, pred, labels=list(range(len(self.classes))))
+            source = f"{len(y):,} rows you passed"
+        else:
+            plots = next((c for c in self.candidates if c["model"] == self.champion), {}).get("plots") or {}
+            if binary and plots.get("thresholds"):
+                cm = binary_confusion(plots["thresholds"], cut)
+            elif not binary and plots.get("confusion"):
+                cm = np.asarray(plots["confusion"])
+            else:
+                raise ValidationError("This capability has no holdout counts to read; pass data= with the target.",
+                                      code="missing_holdout")
+            source = f"championship holdout ({self.rows.get('holdout', 0):,} rows)"
+        df = from_confusion(cm, self.classes)
+        df.attrs.update({"source": source, "threshold": cut if binary else None, "model": self.champion_display})
+        return df
+
     def importance(self, data: Any, *, metric: str | None = None, repeats: int = 3, max_rows: int = 2000,
                    seed: int = 0) -> pd.DataFrame:
         """How much each column matters: shuffle it in `data` (rows with the target) and measure how much the

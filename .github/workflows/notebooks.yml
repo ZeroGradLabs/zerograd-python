@@ -1,0 +1,67 @@
+name: Notebooks
+
+# Run every notebook in examples/ on CPU with the real models and open a pull request with their outputs, so the
+# results show on GitHub. On demand, and on each release tag (after the release is published from the same tag).
+# A notebook that fails keeps its old outputs and is listed in the run summary.
+# One-time setting: Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
+# Pull requests opened with GITHUB_TOKEN don't start CI by themselves; close and reopen, or push to the branch, to run it.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  TQDM_DISABLE: "1"
+  HF_HUB_DISABLE_PROGRESS_BARS: "1"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/zerograd
+          key: notebook-weights-v1
+      - run: uv venv --python 3.12
+      # pip inside the venv, so the notebooks' "!pip install zerograd" cell finds this checkout installed and does nothing
+      - run: uv pip install -e ".[dev]" pip nbconvert ipykernel --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
+      - name: Execute
+        run: |
+          failed=""
+          for nb in examples/*.ipynb; do
+            echo "::group::$nb"
+            if uv run jupyter nbconvert --to notebook --execute --inplace \
+                 --ExecutePreprocessor.timeout=3600 --ExecutePreprocessor.kernel_name=python3 "$nb"; then
+              echo "ran $nb"
+            else
+              git checkout -- "$nb"
+              failed="$failed $nb"
+            fi
+            echo "::endgroup::"
+          done
+          uv run python scripts/clean_notebook_outputs.py examples/*.ipynb | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -n "$failed" ]; then echo "Failed, outputs left as they were:$failed" | tee -a "$GITHUB_STEP_SUMMARY"; fi
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- examples; then echo "No notebook changed." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          branch="notebook-outputs/${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add examples/*.ipynb
+          git commit -m "Notebooks: outputs from run ${{ github.run_id }} (${{ github.ref_name }})"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "Notebooks: outputs from ${{ github.ref_name }}" \
+            --body "The notebooks in examples/ executed on CPU with the real models by [this run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). Only outputs change."
