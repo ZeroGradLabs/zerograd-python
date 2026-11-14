@@ -331,29 +331,39 @@ class Capability:
         return self.data.get("metric") or "roc_auc"
 
     def update(self, **settings: Any) -> "Capability":
-        """Change `threshold` (binary; None resets to 0.5) or `metric` (used by the next tournament). No retraining."""
+        """Change `threshold` (binary; None resets to 0.5), `metric` (used by the next tournament) or `maturity_days`
+        (how long outcomes take to be known, for `performance`). No retraining."""
         self.data = self._c._t.request("PATCH", f"/v1/capabilities/{self.id}", json=settings)
         return self
 
     def predict(self, data: Table, *, version: int | None = None, threshold: float | None = None,
-                wait: bool = True, sensitive: str = "drop", keep: Iterable[str] = (),
+                id_column: str | None = None, wait: bool = True, sensitive: str = "drop", keep: Iterable[str] = (),
                 vault: Vault | None = None) -> "pd.DataFrame | Run":
-        """Predict rows. Returns a DataFrame (prediction, score for binary, proba_<class>) aligned to the input.
+        """Predict rows. Returns a DataFrame (prediction_id, prediction, score for binary, proba_<class>) aligned to the input.
 
         For binary tasks `prediction` is score >= threshold (this call's, else the capability's, else 0.5);
         the probabilities are always there if you'd rather pick the cut-off yourself.
+
+        `prediction_id` is what you send back with `send_outcomes`. With `id_column` (one of your columns, like
+        "loan_id") its values are kept as each prediction's reference, so you can send outcomes by your own id.
+        That column is sent as is: it skips the sensitive-data check and the vault.
 
         Up to 5,000 rows answer in the same request; bigger inputs become a batch run the SDK waits for.
         `data` can also be a gs:// URI or an upload id, which always runs as a batch.
         `sensitive`, `keep` and `vault` work as in `ZeroGrad.create`; with a vault the result comes back decoded.
         """
-        params = _clean({"version": version, "threshold": threshold})
+        params = _clean({"version": version, "threshold": threshold, "id_column": id_column})
         if isinstance(data, str) and (data.startswith("gs://") or data.startswith("upl_")):
             key = "upload_id" if data.startswith("upl_") else "source"
             started = self._c._t.request("POST", f"/v1/capabilities/{self.id}/predict", json={key: data}, params=params)
             run = Run(self._c, started["run_id"])
             return run.wait().output() if wait else run
-        df = _protect(to_frame(data), sensitive, keep=keep, vault=vault)
+        frame = to_frame(data)
+        if id_column is not None and id_column not in frame.columns:
+            raise ValidationError(f"id_column '{id_column}' is not one of the columns.")
+        df = _protect(frame.drop(columns=[id_column]) if id_column else frame, sensitive, keep=keep, vault=vault)
+        if id_column:
+            df = df.assign(**{id_column: frame[id_column].to_numpy()})
         filename, payload = _encode(df)
         if len(df) <= INLINE_ROWS and len(payload) <= UPLOAD_THRESHOLD:
             r = self._c._t.request("POST", f"/v1/capabilities/{self.id}/predict", files={"rows": (filename, payload)},
@@ -368,6 +378,43 @@ class Capability:
         out = run.wait().output()
         out.index = df.index
         return vault.decode(out) if vault is not None else out
+
+    def send_outcomes(self, outcomes: Table, *, vault: Vault | None = None) -> dict:
+        """Tell the platform what actually happened to past predictions.
+
+        Each row has `prediction_id` or `reference` (your `id_column` value), plus `outcome` (one of the classes),
+        `decision` (what you did with the prediction, free text) or both, and optionally `observed_at`.
+        Sending the same id again updates it. Returns how many rows matched a prediction.
+        With the vault the capability was created with, outcomes go out as the same label tokens.
+        """
+        if isinstance(outcomes, dict):
+            outcomes = [outcomes]
+        if isinstance(outcomes, list):
+            rows = [{k: _jsonable(v) for k, v in r.items()} for r in outcomes]
+            if vault is not None:
+                rows = [{**r, "outcome": _vault_label(vault, r["outcome"])} if r.get("outcome") is not None else r for r in rows]
+            return self._c._t.request("POST", f"/v1/capabilities/{self.id}/outcomes", json={"outcomes": rows})
+        df = to_frame(outcomes).reset_index(drop=True)
+        if vault is not None and "outcome" in df:
+            df["outcome"] = df["outcome"].map(lambda v: None if pd.isna(v) else _vault_label(vault, v))
+        filename, payload = _encode(df)
+        return self._c._t.request("POST", f"/v1/capabilities/{self.id}/outcomes", files={"outcomes": (filename, payload)})
+
+    def performance(self, cohort: str = "week", *, version: int | None = None, include_test: bool = False) -> pd.DataFrame:
+        """Production metrics from the outcomes you sent, one row per cohort of prediction date.
+
+        Only mature cohorts (older than the capability's `maturity_days`, set with `update(maturity_days=...)`)
+        get metrics. `attrs` holds `overall`, `by_version` (each version against its holdout score) and `totals`.
+        """
+        r = self._c._t.request("GET", f"/v1/capabilities/{self.id}/performance",
+                               params=_clean({"cohort": cohort, "version": version, "include_test": include_test or None}))
+        rows = [{**{k: v for k, v in c.items() if k != "metrics"}, **(c.get("metrics") or {})} for c in r["cohorts"]]
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df = df.set_index("start")
+        for key in ("overall", "by_version", "totals", "maturity_days", "metric", "holdout"):
+            df.attrs[key] = r.get(key)
+        return df
 
     def delete(self) -> dict:
         """Delete the capability and the history stored with it."""
@@ -438,8 +485,32 @@ def _encode(df: pd.DataFrame) -> tuple[str, bytes]:
         return "data.csv", df.to_csv(index=False).encode()
 
 
+def _vault_label(vault: Vault, value: Any) -> str:
+    from .privacy import _canon
+
+    tokens = {_canon(v): tok for tok, v in vault._labels.items()}
+    if _canon(value) not in tokens:
+        raise ValidationError(f"The vault doesn't know the label {value!r}. Use the vault (or vault.load) the capability was created with.")
+    return tokens[_canon(value)]
+
+
+def _jsonable(v: Any) -> Any:
+    if v is None or (isinstance(v, float) and v != v):
+        return None
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    if hasattr(v, "item"):  # numpy scalars
+        return v.item()
+    return v
+
+
 def _records_to_frame(records: list[dict], classes: list, index: pd.Index) -> pd.DataFrame:
-    out = pd.DataFrame({"prediction": [r["prediction"] for r in records]}, index=index)
+    out = pd.DataFrame(index=index)
+    if records and "prediction_id" in records[0]:
+        out["prediction_id"] = [r["prediction_id"] for r in records]
+    if records and "reference" in records[0]:
+        out["reference"] = [r["reference"] for r in records]
+    out["prediction"] = [r["prediction"] for r in records]
     if records and "score" in records[0]:
         out["score"] = [r["score"] for r in records]
     for cls in classes:
