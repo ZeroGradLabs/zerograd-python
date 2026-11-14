@@ -11,6 +11,7 @@ authors on first use. TabPFN v2 and TabICLv2 also run these tasks, through the c
 
 from __future__ import annotations
 
+import hashlib
 import os
 import urllib.request
 from pathlib import Path
@@ -143,26 +144,43 @@ FOMO_0D = register_model(ModelSpec(
 
 # ---------------------------------------------------------------- ZEUS
 ZEUS_DRIVE_ID = "1D7uikacymUnmmMxjUjBuCNIomqhBWS67"  # the checkpoint the authors link from github.com/gmum/zeus
+# SHA-256 of that file. Google Drive gives no integrity guarantee and torch.load unpickles, so the download is
+# checked against this hash before it is loaded. ZEROGRAD_ZEUS_PATH (your own copy) is not checked.
+ZEUS_SHA256 = "__ZEUS_SHA256__"
 ZEUS_DIM = 30
 ZEUS_ARCH = dict(embed_dim=512, n_head=4, hid_dim=1024, n_layers=12, num_gaussians=10)
 ZEUS_ROWS = 2000  # rows embedded together; more rows are assigned to the nearest cluster
 
 
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def zeus_path() -> str:
-    """ZEROGRAD_ZEUS_PATH, else the authors' checkpoint, downloaded once to ~/.cache/zerograd."""
+    """ZEROGRAD_ZEUS_PATH, else the authors' checkpoint, downloaded once to ~/.cache/zerograd and checked by SHA-256."""
     path = os.environ.get("ZEROGRAD_ZEUS_PATH")
     if path:
         return path
     dest = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "zerograd" / "zeus.pt"
+    if dest.exists() and _sha256(dest) != ZEUS_SHA256:
+        dest.unlink()  # a partial, stale or tampered copy (0.2.0 cached it without a check): download it again
     if not dest.exists():
         dest.parent.mkdir(parents=True, exist_ok=True)
         url = f"https://drive.usercontent.google.com/download?id={ZEUS_DRIVE_ID}&export=download&confirm=t"
         tmp = dest.with_suffix(".part")
         urllib.request.urlretrieve(url, tmp)  # noqa: S310 (fixed https URL)
-        if tmp.stat().st_size < 1_000_000:
+        got = _sha256(tmp)
+        if got != ZEUS_SHA256:
             tmp.unlink(missing_ok=True)
-            raise RuntimeError("Could not download the ZEUS checkpoint from Google Drive. Download it from "
-                               "github.com/gmum/zeus and set ZEROGRAD_ZEUS_PATH.")
+            raise RuntimeError(
+                f"The ZEUS checkpoint downloaded from Google Drive does not match its SHA-256 (expected "
+                f"{ZEUS_SHA256}, got {got}), so it was not loaded. Download it from github.com/gmum/zeus, check it, "
+                "and set ZEROGRAD_ZEUS_PATH."
+            )
         tmp.rename(dest)
     return str(dest)
 

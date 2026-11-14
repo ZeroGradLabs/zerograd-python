@@ -1,0 +1,17 @@
+name: ZEUS hash (temporary)
+
+# Temporary, removed before merge: prints the SHA-256 of the ZEUS checkpoint on Google Drive.
+on:
+  pull_request:
+
+jobs:
+  hash:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -sSL -o zeus.pt "https://drive.usercontent.google.com/download?id=1D7uikacymUnmmMxjUjBuCNIomqhBWS67&export=download&confirm=t"
+          ls -l zeus.pt
+          file zeus.pt
+          sha256sum zeus.pt
+          curl -sSL -o zeus2.pt "https://drive.usercontent.google.com/download?id=1D7uikacymUnmmMxjUjBuCNIomqhBWS67&export=download&confirm=t"
+          sha256sum zeus2.pt

@@ -1,5 +1,7 @@
 """Anomaly detection, imputation, synthetic data and clustering, with tiny stand-in models (no downloads)."""
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -198,3 +200,62 @@ def test_zeus_features_project_to_30():
     X[0, 0] = np.nan
     f = zeus_features(X)
     assert f.shape == (80, 30) and f.min() >= -1 - 1e-6 and f.max() <= 1 + 1e-6
+
+
+def _fake_drive(monkeypatch, payload: bytes):
+    from zerograd.models import unsupervised as u
+
+    calls = []
+
+    def retrieve(url, dest):
+        calls.append(url)
+        Path(dest).write_bytes(payload)
+
+    monkeypatch.setattr(u.urllib.request, "urlretrieve", retrieve)
+    return u, calls
+
+
+def test_zeus_download_checked_by_sha256(tmp_path, monkeypatch):
+    import hashlib
+
+    monkeypatch.delenv("ZEROGRAD_ZEUS_PATH", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    good = b"zeus weights" * 10
+    u, calls = _fake_drive(monkeypatch, good)
+    monkeypatch.setattr(u, "ZEUS_SHA256", hashlib.sha256(good).hexdigest())
+    path = Path(u.zeus_path())
+    assert path.read_bytes() == good and len(calls) == 1
+    u.zeus_path()  # cached and still valid: no second download
+    assert len(calls) == 1
+
+
+def test_zeus_download_with_wrong_hash_is_refused(tmp_path, monkeypatch):
+    monkeypatch.delenv("ZEROGRAD_ZEUS_PATH", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    u, _ = _fake_drive(monkeypatch, b"not the checkpoint")
+    monkeypatch.setattr(u, "ZEUS_SHA256", "0" * 64)
+    with pytest.raises(RuntimeError, match="SHA-256"):
+        u.zeus_path()
+    assert not any((tmp_path / "zerograd").iterdir())  # nothing left behind to load later
+
+
+def test_zeus_stale_cache_is_downloaded_again(tmp_path, monkeypatch):
+    import hashlib
+
+    monkeypatch.delenv("ZEROGRAD_ZEUS_PATH", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    (tmp_path / "zerograd").mkdir()
+    (tmp_path / "zerograd" / "zeus.pt").write_bytes(b"tampered")
+    good = b"zeus weights"
+    u, calls = _fake_drive(monkeypatch, good)
+    monkeypatch.setattr(u, "ZEUS_SHA256", hashlib.sha256(good).hexdigest())
+    assert Path(u.zeus_path()).read_bytes() == good and len(calls) == 1
+
+
+def test_zeus_own_path_is_not_checked(tmp_path, monkeypatch):
+    from zerograd.models import unsupervised as u
+
+    mine = tmp_path / "mine.pt"
+    mine.write_bytes(b"x")
+    monkeypatch.setenv("ZEROGRAD_ZEUS_PATH", str(mine))
+    assert u.zeus_path() == str(mine)
