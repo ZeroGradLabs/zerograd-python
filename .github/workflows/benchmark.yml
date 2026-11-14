@@ -1,6 +1,6 @@
 name: Benchmark
 
-# On demand: the benchmark in benchmarks/run.py (one job per OpenML dataset, CPU) and the README GIF.
+# On demand: the benchmark in benchmarks/run.py (one job per OpenML dataset, classification and regression, CPU) and the README GIF.
 # Results: the "benchmark-results" artifact (results.csv + summary.md) and the "demo-gif" artifact.
 on:
   workflow_dispatch:
@@ -24,7 +24,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dataset: [31, 37, 1464, 1494, 1067, 40981, 40701, 1489, 40983, 1487, 23, 54]
+        # classification, then regression (benchmarks/run.py picks the task from the id)
+        dataset: [31, 37, 1464, 1494, 1067, 40981, 40701, 1489, 40983, 1487, 23, 54, 560, 44132, 44136, 44138, 44145, 44147]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

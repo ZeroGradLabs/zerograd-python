@@ -126,6 +126,27 @@ What happens:
 
 Pick the competitors with `ZeroGrad(models=["tabpfn-v2", "mitra-v2"])`.
 
+## Benchmark
+
+We ran 12 OpenML classification datasets and 6 regression datasets, 3 seeds each, on GitHub Actions CPUs. The champion
+is picked on the training rows only, and every number below comes from a 20% test split that nothing saw during
+selection. The baseline is scikit-learn's HistGradientBoosting with default settings, and regression also gets Ridge
+as a linear baseline.
+
+| | champion against HistGradientBoosting (wins / ties / losses) |
+|---|---|
+| ROC AUC | 11 / 0 / 1 (mean 0.894 against 0.866) |
+| Log loss | 12 / 0 / 0 (0.323 against 0.454) |
+| Brier score | 12 / 0 / 0 |
+| Accuracy | 10 / 1 / 1 |
+| Regression RMSE | 6 / 0 / 0 (and 6 / 0 / 0 against Ridge) |
+
+The one loss is churn, by 0.004 of ROC AUC: TabPFN v2 alone would have won it, but the championship picked another
+model on the training rows. Gradient boosting is much faster, though: a fit and predict takes it well under a second,
+while the champion's number (about 6 minutes on average on CPU) includes running the whole championship of four
+models. Per-dataset tables for every model are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md), and
+`python benchmarks/run.py` reproduces them.
+
 ## Predict
 
 ```python
