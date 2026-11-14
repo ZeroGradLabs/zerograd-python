@@ -198,3 +198,23 @@ def test_zeus_features_project_to_30():
     X[0, 0] = np.nan
     f = zeus_features(X)
     assert f.shape == (80, 30) and f.min() >= -1 - 1e-6 and f.max() <= 1 + 1e-6
+
+
+def test_zeus_checkpoint_must_match_its_hash(tmp_path, monkeypatch):
+    from zerograd.models import unsupervised as u
+
+    monkeypatch.delenv("ZEROGRAD_ZEUS_PATH", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    cached = tmp_path / "zerograd" / "zeus.pt"
+    cached.parent.mkdir()
+    cached.write_bytes(b"not the authors' checkpoint")
+    with pytest.raises(RuntimeError, match="SHA-256"):
+        u.zeus_path()
+    assert not cached.exists()  # a file that does not match is removed, never loaded
+
+    good = b"pretend checkpoint"
+    cached.write_bytes(good)
+    import hashlib
+
+    monkeypatch.setattr(u, "ZEUS_SHA256", hashlib.sha256(good).hexdigest())
+    assert u.zeus_path() == str(cached)
