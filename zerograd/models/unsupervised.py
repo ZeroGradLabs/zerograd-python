@@ -11,6 +11,7 @@ authors on first use. TabPFN v2 and TabICLv2 also run these tasks, through the c
 
 from __future__ import annotations
 
+import hashlib
 import os
 import urllib.request
 from pathlib import Path
@@ -143,6 +144,7 @@ FOMO_0D = register_model(ModelSpec(
 
 # ---------------------------------------------------------------- ZEUS
 ZEUS_DRIVE_ID = "1D7uikacymUnmmMxjUjBuCNIomqhBWS67"  # the checkpoint the authors link from github.com/gmum/zeus
+ZEUS_SHA256 = "eb60086459de338b1795ce2849e02e0d7e59cd95af43d01534dd84083f2b749b"  # the downloaded file must match this exactly, or it is not loaded
 ZEUS_DIM = 30
 ZEUS_ARCH = dict(embed_dim=512, n_head=4, hid_dim=1024, n_layers=12, num_gaussians=10)
 ZEUS_ROWS = 2000  # rows embedded together; more rows are assigned to the nearest cluster
@@ -164,7 +166,19 @@ def zeus_path() -> str:
             raise RuntimeError("Could not download the ZEUS checkpoint from Google Drive. Download it from "
                                "github.com/gmum/zeus and set ZEROGRAD_ZEUS_PATH.")
         tmp.rename(dest)
+    if _sha256(dest) != ZEUS_SHA256:
+        dest.unlink(missing_ok=True)
+        raise RuntimeError("The downloaded ZEUS checkpoint does not match the expected SHA-256, so it was not loaded. "
+                           "Download it from github.com/gmum/zeus and set ZEROGRAD_ZEUS_PATH if you trust it.")
     return str(dest)
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
 
 
 def _zeus_model():
@@ -178,7 +192,7 @@ def _zeus_model():
         encoders.Linear(ZEUS_DIM, a["embed_dim"], replace_nan_by_zero=True), a["num_gaussians"], a["embed_dim"],
         a["n_head"], a["hid_dim"], a["n_layers"], 0.0, efficient_eval_masking=True, n_clusters=a["num_gaussians"],
     )
-    ckpt = torch.load(zeus_path(), map_location="cpu", weights_only=False)
+    ckpt = torch.load(zeus_path(), map_location="cpu", weights_only=True)
     state = ckpt.get("model", ckpt)
     result = net.load_state_dict(state, strict=False)
     # The authors load with strict=False. The checkpoint has no last decoder layer, which embedding never uses

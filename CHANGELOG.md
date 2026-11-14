@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 (2026-11-14)
+
+* `zg.cluster` checks the SHA-256 of the ZEUS checkpoint it downloads and loads it with `weights_only=True`. A file that does not match is deleted and never loaded.
+
 ## 0.2.0 (2026-11-14)
 
 First open source release, Apache 2.0. `pip install zerograd` includes the local engine with TabPFN v2 and TabICLv2.
