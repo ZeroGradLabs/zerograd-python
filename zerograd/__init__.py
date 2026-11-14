@@ -7,6 +7,8 @@
     cap.predict(new_df)
 
     zg = ZeroGrad(remote=True)                        # the ZeroGrad platform (ZEROGRAD_API_KEY)
+
+No target? zg.anomalies(df), zg.impute(df), zg.synthesize(df) and zg.cluster(df) run locally (zerograd.unsupervised).
 """
 
 from ._remote import Capability, Pipeline, RemoteZeroGrad, Run
@@ -26,6 +28,7 @@ from .errors import (
 from .local import LocalCapability, LocalZeroGrad, load
 from .models import LicenseGuardError, NonCommercialModelWarning, list_models, list_tasks, model_info, register_model
 from .privacy import SensitiveDataWarning, Vault, drop_sensitive, scan
+from .unsupervised import AnomalyResult, ClusterResult, ImputeResult, SyntheticResult
 
 __all__ = [
     "ZeroGrad", "LocalZeroGrad", "RemoteZeroGrad", "LocalCapability", "Capability", "Run", "Pipeline", "load", "ContextCurve",
@@ -33,5 +36,6 @@ __all__ = [
     "ZeroGradError", "AuthError", "NotFoundError", "ValidationError", "LimitError",
     "RunFailedError", "APIError", "UsageWarning",
     "Vault", "scan", "drop_sensitive", "SensitiveDataWarning",
+    "AnomalyResult", "ImputeResult", "SyntheticResult", "ClusterResult",
     "__version__",
 ]

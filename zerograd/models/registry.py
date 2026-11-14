@@ -29,8 +29,16 @@ TASKS: dict[str, dict] = {
                        "description": "Predict a category: binary (churn, fraud, default) or multiclass (up to 10 classes)."},
     "regression": {"display": "Regression", "in_sdk": True,
                    "description": "Predict a number (amount, price, demand, time). Runs locally in this version."},
-    "imputation": {"display": "Imputation", "in_sdk": False,
-                   "description": "Fill in missing values from the rest of the row. Supported by some models; not in the SDK yet."},
+    "anomaly_detection": {"display": "Anomaly detection", "in_sdk": True,
+                          "description": "Rank rows by how unusual they are, with no labels: fraud, errors, rare cases. "
+                                         "Says which columns make each row unusual."},
+    "imputation": {"display": "Imputation", "in_sdk": True,
+                   "description": "Fill in missing values from the rest of the row, after a championship on cells we hide."},
+    "synthetic_data": {"display": "Synthetic data", "in_sdk": True,
+                       "description": "New rows with the same columns and relations as yours, scored by how hard they "
+                                      "are to tell apart from the real ones."},
+    "clustering": {"display": "Clustering", "in_sdk": True,
+                   "description": "Group rows into segments with no labels, and describe what sets each segment apart."},
 }
 
 
@@ -70,12 +78,20 @@ class ModelSpec:
     # Regression: (X, y float, serving) -> a model with predict(X) -> one number per row. None: not in the SDK yet.
     regress_fn: Callable[[np.ndarray, np.ndarray, bool], FittedRegressor] | None = None
     regression_weights_fn: Callable[[], list[tuple[str, str]]] | None = None
+    # Anomaly detection with a dedicated model: (X context, X query) -> one score per query row, higher = more unusual.
+    # Classifiers need none: they detect anomalies, impute and synthesize through zerograd.unsupervised's chain rule.
+    anomaly_fn: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None
+    # Clustering: X -> one embedding row per input row, clustered with k-means.
+    embed_fn: Callable[[np.ndarray], np.ndarray] | None = None
 
     @property
     def sdk_tasks(self) -> tuple[str, ...]:
         """The tasks this version of the SDK runs with this model (a subset of `tasks`)."""
-        return tuple(t for t in ("classification", "regression")
-                     if (t == "classification" and self.fit_fn is not None) or (t == "regression" and self.regress_fn))
+        ok = {"classification": self.fit_fn is not None, "regression": self.regress_fn is not None,
+              "anomaly_detection": self.anomaly_fn is not None or self.fit_fn is not None,
+              "imputation": self.fit_fn is not None, "synthetic_data": self.fit_fn is not None,
+              "clustering": self.embed_fn is not None}
+        return tuple(t for t in TASKS if t in self.tasks and ok.get(t))
 
     def runs(self, task: str) -> bool:
         """task: "classification", "regression", or a capability's task ("binary", "multiclass", "regression")."""

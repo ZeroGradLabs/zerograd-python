@@ -18,3 +18,12 @@ Other models (code and weights are theirs, not part of this package):
   TabICL / TabICLv2   BSD-3-Clause, Inria (soda-inria/tabicl)
   Mitra, Mitra-v2     Apache 2.0, Amazon (autogluon)
   TabDPT              Apache 2.0, Layer 6
+  FoMo-0D             MIT, Yuchen Shen (A-Chicharito-S/FoMo-0D); anomaly detection
+  ZEUS                Apache 2.0, Jagiellonian University (gmum/zeus); clustering
+
+Third-party code included in this package (inference only, under zerograd/models/_vendor):
+  fomo0d/   from FoMo-0D, MIT License, Copyright (c) 2025 Yuchen Shen. Adapted from PFNs
+            (automl/PFNs, Apache 2.0). License in zerograd/models/_vendor/fomo0d/LICENSE.
+  zeus/     from ZEUS, Apache License 2.0, based on TabPFN v1, Copyright 2022 The University of
+            Freiburg (Noah Hollmann, Samuel Müller, Katharina Eggensperger, Frank Hutter).
+            License and NOTICE in zerograd/models/_vendor/zeus/.

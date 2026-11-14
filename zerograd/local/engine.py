@@ -123,6 +123,36 @@ class LocalZeroGrad:
         ui.say(f"  {ui.dim(phrase('champion'))}")
         return cap
 
+    # ------------------------------------------------------------------ tasks with no target
+    def anomalies(self, data: Any, *, labels: Any = None, reference: Any = None,
+                  models: Iterable[str] | None = None, contamination: float = 0.05, **options: Any):
+        """Score every row by how unusual it is, with the columns why. See zerograd.unsupervised.anomalies."""
+        from ..unsupervised import anomalies
+
+        return anomalies(data, labels=labels, reference=reference, models=models, contamination=contamination,
+                         noncommercial=self._nc_names(), progress=self.progress, **options)
+
+    def impute(self, data: Any, *, models: Iterable[str] | None = None, **options: Any):
+        """Fill missing values with the champion of a championship on hidden cells. See zerograd.unsupervised.impute."""
+        from ..unsupervised import impute
+
+        return impute(data, models=models, noncommercial=self._nc_names(), progress=self.progress, **options)
+
+    def synthesize(self, data: Any, n: int | None = None, *, models: Iterable[str] | None = None, **options: Any):
+        """New rows like yours, scored by how hard they are to tell apart. See zerograd.unsupervised.synthesize."""
+        from ..unsupervised import synthesize
+
+        return synthesize(data, n, models=models, noncommercial=self._nc_names(), progress=self.progress, **options)
+
+    def cluster(self, data: Any, k: int | None = None, *, models: Iterable[str] | None = None, **options: Any):
+        """Segments, and what sets each apart. See zerograd.unsupervised.cluster."""
+        from ..unsupervised import cluster
+
+        return cluster(data, k, models=models, noncommercial=self._nc_names(), progress=self.progress, **options)
+
+    def _nc_names(self) -> list[str]:
+        return [] if isinstance(self._noncommercial, bool) else list(self._noncommercial)
+
     def context_curve(self, examples: Any, target: str, sizes: Iterable[int] | None = None, test: Any = None, *,
                       model: str | None = None, metric: str | None = None, seed: int = 0,
                       tolerance: float | None = None, drop: Iterable[str] | None = None,

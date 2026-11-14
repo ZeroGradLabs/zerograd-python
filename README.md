@@ -92,10 +92,13 @@ In a notebook these render as tables with a badge for commercial and non-commerc
 | Mitra-v2 | `mitra-v2` | Apache 2.0 | yes | yes, with `pip install "zerograd[mitra]"` |
 | TabDPT | `tabdpt` | Apache 2.0 | yes | yes, with `pip install "zerograd[tabdpt]"` |
 | Mitra | `mitra` | Apache 2.0 | yes | by name |
+| FoMo-0D | `fomo-0d` | MIT | yes | anomaly detection |
+| ZEUS | `zeus` | Apache 2.0 | yes | clustering |
 
 The full list, with sources and the models that are off by default, is in [MODELS.md](MODELS.md).
 This version runs **classification** (binary and multiclass, up to 10 classes) and **regression** (locally, with
-TabPFN v2, TabICLv2 and TabDPT). `zerograd.list_tasks()` shows which models run each task.
+TabPFN v2, TabICLv2 and TabDPT), plus four tasks with no target: anomaly detection, imputation, synthetic data and
+clustering (below). `zerograd.list_tasks()` shows which models run each task.
 
 ## The championship
 
@@ -171,6 +174,35 @@ cap.predict(one_listing)                     # a dict in, {"prediction": 154230.
 deciles of the target, so both see cheap and expensive rows. Context curves work the same way; for RMSE and MAE the
 tolerance is relative (within 0.5% of the best). Mitra-v2 sits regression out in this version, and the platform
 (`remote=True`) runs classification only for now.
+
+## No target: anomalies, gaps, synthetic rows, segments
+
+Four tasks need no labels. Each runs on your machine, compares the foundation models with the classic
+scikit-learn method whenever there is something to measure, and says which one won.
+
+```python
+found = zg.anomalies(transactions)           # every row scored; the top 5% flagged
+found.top(10)                                 # the most unusual rows, with the columns that make them unusual
+zg.anomalies(transactions, labels="fraud")    # known cases? a championship by ROC AUC, against Isolation Forest, LOF, kNN
+zg.anomalies(today, reference=last_month)     # score new rows against rows you trust
+
+filled = zg.impute(customers)                 # hide 10% of the known cells, score every model, fill with the champion
+filled.data, filled.filled, filled.evaluation
+
+fake = zg.synthesize(customers, n=5_000)      # new rows; detection AUC near 0.5 = hard to tell from yours
+fake.data, fake.evaluation                    # also the share of exact copies of a real row
+
+groups = zg.cluster(customers)                # k picked between 2 and 10, or cluster(df, k=4)
+groups.labels, groups.profiles                # segment per row, and what sets each segment apart
+```
+
+TabPFN v2 and TabICLv2 do the first three with the chain rule: the probability of a row is the product of
+"how likely is this column, given the ones before it", and each factor is a classification question they answer
+in context (the method of the TabPFN paper, for any classifier in the registry). The same factors say *why* a row
+is unusual. [FoMo-0D](https://arxiv.org/abs/2409.05672) (MIT) detects anomalies zero-shot and
+[ZEUS](https://arxiv.org/abs/2505.10704) (Apache 2.0) embeds rows for clustering zero-shot; both are commercial
+use. Synthetic rows are not anonymous by themselves: check `exact_copies` and drop identifying columns first.
+These run locally for now, not with `remote=True`.
 
 ## Save and open
 
