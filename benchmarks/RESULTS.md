@@ -30,9 +30,6 @@ saw during selection. Bold is the best value per dataset. Training rows are capp
 | Accuracy | 0.829 | 0.854 | 10 / 1 / 1 |
 | Balanced accuracy | 0.746 | 0.772 | 10 / 0 / 2 |
 | F1 | 0.677 | 0.710 | 9 / 0 / 3 |
-| Seconds per fit + predict | 0.2 | 353.1 | 0 / 0 / 12 |
-
-The champion's seconds include the whole championship (four models on the training rows) plus the winner's predict.
 
 ## Regression: mean test RMSE (lower is better)
 
