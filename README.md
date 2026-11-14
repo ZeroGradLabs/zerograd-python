@@ -142,9 +142,7 @@ as a linear baseline.
 | Regression RMSE | 6 / 0 / 0 (and 6 / 0 / 0 against Ridge) |
 
 The one loss is churn, by 0.004 of ROC AUC: TabPFN v2 alone would have won it, but the championship picked another
-model on the training rows. Gradient boosting is much faster, though: a fit and predict takes it well under a second,
-while the champion's number (about 6 minutes on average on CPU) includes running the whole championship of four
-models. Per-dataset tables for every model are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md), and
+model on the training rows. Per-dataset tables for every model are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md), and
 `python benchmarks/run.py` reproduces them.
 
 ## Predict
