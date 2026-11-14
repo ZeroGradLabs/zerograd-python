@@ -91,6 +91,8 @@ class CVResult:
         out["folds"] = g.size()
         out["seconds"] = g["seconds"].sum().round(2)
         higher = champ.METRICS[self.metric][1]
+        first = [self.metric, f"{self.metric}_std", *[c for c in ("ks", "lift_at_10") if c in out]]
+        out = out[first + [c for c in out.columns if c not in first]]
         out = out.sort_values(self.metric, ascending=not higher)
         out.attrs.update(metric=self.metric, split=self.split)
         return out
