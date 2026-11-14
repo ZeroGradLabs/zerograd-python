@@ -2,9 +2,8 @@
 
 import json
 
-import pandas as pd
-
 import httpx
+import pandas as pd
 import pytest
 from conftest import titanic_like
 
