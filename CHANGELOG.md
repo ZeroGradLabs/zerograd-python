@@ -14,7 +14,8 @@
 * **Errors you can read.** A model that did not finish shows its whole first line in the podium and in
   `cap.evaluation`; `cap.errors` has the full message.
 * `examples/use-cases.ipynb` walks the SDK in six use cases on public data, in Colab: churn, house prices,
-  evaluation and thresholds, anomalies, clustering, and outcomes on the platform with an API key.
+  evaluation and thresholds, anomalies, clustering, and outcomes on the platform with an API key, with plots
+  (ROC, precision-recall, calibration, the podium, the context curve, cost by threshold, importance, segments).
 
 ## 0.2.1 (2026-11-14)
 
