@@ -35,6 +35,7 @@ from .local.validation import CVResult
 from .models import LicenseGuardError, NonCommercialModelWarning, list_models, list_tasks, model_info, register_model
 from .privacy import SensitiveDataWarning, Vault, drop_sensitive, scan
 from .unsupervised import AnomalyResult, ClusterResult, ImputeResult, SyntheticResult
+from .weights import cached_weights, config, download, remove_weights
 
 __all__ = [
     "ZeroGrad", "LocalZeroGrad", "RemoteZeroGrad", "LocalCapability", "Capability", "Run", "Pipeline", "load", "ContextCurve",
@@ -44,5 +45,6 @@ __all__ = [
     "Vault", "scan", "drop_sensitive", "SensitiveDataWarning",
     "AnomalyResult", "ImputeResult", "SyntheticResult", "ClusterResult",
     "ZeroGradClassifier", "ZeroGradRegressor", "CVResult", "ThresholdResult",
+    "download", "cached_weights", "remove_weights", "config",
     "__version__",
 ]

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .commercial import TABPFN_LIMITS
 from .registry import Aligned, FittedModel, FittedRegressor, ModelSpec, Point, device, missing, register_model
 
 _NC = "Not for production or commercial use."
@@ -29,14 +30,13 @@ _NC = "Not for production or commercial use."
 # ---------------------------------------------------------------- TabPFN 2.5 / 2.6 / 3 / 3.5 (Prior Labs, non-commercial)
 def _tabpfn_version_fit(version_name: str):
     def fit(X: np.ndarray, y: np.ndarray, n_classes: int, serving: bool) -> FittedModel:
-        os.environ.setdefault("TABPFN_ALLOW_CPU_LARGE_DATASET", "1")
         from tabpfn import TabPFNClassifier
         from tabpfn.constants import ModelVersion
 
         # The tabpfn package downloads these gated weights itself, after you sign in and accept the license.
         model = TabPFNClassifier.create_default_for_version(
             getattr(ModelVersion, version_name), device=device(), random_state=0,
-            fit_mode="fit_with_cache" if serving else "fit_preprocessors",
+            fit_mode="fit_with_cache" if serving else "fit_preprocessors", **TABPFN_LIMITS,
         )
         model.fit(X, y)
         return Aligned(model, n_classes)
@@ -46,13 +46,12 @@ def _tabpfn_version_fit(version_name: str):
 
 def _tabpfn_version_regress(version_name: str):
     def regress(X: np.ndarray, y: np.ndarray, serving: bool) -> FittedRegressor:
-        os.environ.setdefault("TABPFN_ALLOW_CPU_LARGE_DATASET", "1")
         from tabpfn import TabPFNRegressor
         from tabpfn.constants import ModelVersion
 
         model = TabPFNRegressor.create_default_for_version(
             getattr(ModelVersion, version_name), device=device(), random_state=0,
-            fit_mode="fit_with_cache" if serving else "fit_preprocessors",
+            fit_mode="fit_with_cache" if serving else "fit_preprocessors", **TABPFN_LIMITS,
         )
         model.fit(X, y)
         return Point(model)

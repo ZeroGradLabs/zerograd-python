@@ -1,7 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 (2026-11-14)
 
+* **TabPFN v2 on CPU with more than 1,000 rows.** It failed with "Running on CPU with more than 1000 samples is not
+  allowed": the adapter set `TABPFN_ALLOW_CPU_LARGE_DATASET`, but tabpfn reads it only when first imported, and
+  listing the models already imports it. It now passes `ignore_pretraining_limits=True` (the SDK keeps its own
+  context and column limits).
+* **Weights on your disk.** `zerograd.download(...)` fetches weights on purpose, `zerograd.cached_weights()` lists
+  them, `zerograd.remove_weights(...)` deletes the ones ZeroGrad downloaded (never files other projects put in the
+  Hugging Face cache), and `zerograd.config(auto_remove_weights=True)` or `ZEROGRAD_AUTO_REMOVE_WEIGHTS=1` deletes
+  each session's downloads when the process ends.
+* **Greeting.** It says "installed · weights download on first use" until the weights are on disk, and "ready" after.
+* **Errors you can read.** A model that did not finish shows its whole first line in the podium and in
+  `cap.evaluation`; `cap.errors` has the full message.
 * `examples/use-cases.ipynb` walks the SDK in six use cases on public data, in Colab: churn, house prices,
   evaluation and thresholds, anomalies, clustering, and outcomes on the platform with an API key.
 
