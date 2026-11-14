@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-11-14)
 
 First open source release, Apache 2.0. `pip install zerograd` includes the local engine with TabPFN v2 and TabICLv2.
 

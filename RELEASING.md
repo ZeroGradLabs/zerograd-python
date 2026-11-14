@@ -13,7 +13,7 @@ Step by step for the first public release and every one after it. Commands are f
 3. **GitHub environment**: in the repo, *Settings* → *Environments* → *New environment* → `pypi`
    (optionally add yourself as a required reviewer so every release waits for your click).
 
-## 0b. When the repo goes public (soft launch, Nov 17)
+## 0b. When the repo goes public
 
 Both settings are unavailable while the repo is private on the free org plan:
 
