@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.4 (2026-11-15)
 
 * **MCP server for agents.** `pip install "zerograd[mcp]"` adds `zerograd-mcp`, a local stdio server for Claude Code,
   Cursor, Codex and other MCP clients, with tools to inspect a table, create, list and evaluate capabilities,
