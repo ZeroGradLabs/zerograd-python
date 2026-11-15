@@ -38,8 +38,13 @@ dependencies = [
 local = []
 mitra = ["autogluon.tabular[mitra]>=1.6"]
 tabdpt = ["tabdpt>=1.1"]
-all = ["zerograd[mitra,tabdpt]"]
-dev = ["pytest>=8", "ruff>=0.6", "matplotlib>=3.5"]
+# The MCP server for agents (Claude Code, Cursor, Codex...): `zerograd-mcp`.
+mcp = ["mcp>=2"]
+all = ["zerograd[mitra,tabdpt,mcp]"]
+dev = ["pytest>=8", "ruff>=0.6", "matplotlib>=3.5", "mcp>=2"]
+
+[project.scripts]
+zerograd-mcp = "zerograd.mcp_server:main"
 
 [project.urls]
 Homepage = "https://zerograd.dev"
@@ -56,6 +61,11 @@ path = "zerograd/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["zerograd"]
+
+[tool.hatch.build.targets.wheel.force-include]
+# The MCP server's read_docs tool reads these from the installed package, offline.
+"README.md" = "zerograd/_docs/README.md"
+"MODELS.md" = "zerograd/_docs/MODELS.md"
 
 [tool.hatch.build.targets.sdist]
 include = ["zerograd", "tests", "README.md", "LICENSE", "NOTICE", "TERMS.md", "MODELS.md", "CHANGELOG.md", "SECURITY.md"]

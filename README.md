@@ -164,6 +164,34 @@ Everything below is explained, with code, in the [docs](https://zerograd.dev/doc
 * **Bring your own model:** plug any model into the championship with `zerograd.register_model`.
 * **[The ZeroGrad platform](https://zerograd.dev/docs#platform):** with `remote=True` the same code runs on the platform, with versions, scheduled championships, monitoring and batch pipelines.
 
+## Use it from an agent (MCP)
+
+ZeroGrad ships an [MCP](https://modelcontextprotocol.io) server, so Claude Code, Cursor, Codex or any MCP client can
+create capabilities and predict with plain language. It runs on your machine: nothing is uploaded.
+
+```bash
+pip install "zerograd[mcp]"
+claude mcp add zerograd -- zerograd-mcp      # or, with no install: claude mcp add zerograd -- uvx --from "zerograd[mcp]" zerograd-mcp
+```
+
+Other clients take the same command (`zerograd-mcp`, stdio). Then ask, for example: *"Predict churn in
+customers.csv and tell me which columns matter."*
+
+| Tool | What it does |
+| --- | --- |
+| `inspect_data` | Columns, a likely target and columns that look like personal data, from a CSV or Parquet file. |
+| `create_capability` | Runs the championship on the labeled rows and saves the capability by name. |
+| `list_capabilities` | The capabilities saved on this machine, with champion and score. |
+| `evaluate_capability` | Leaderboard, baselines and the classification report. |
+| `predict` | Writes predictions next to the input file and returns a summary; or up to 100 rows inline. |
+| `explain` | Column importance on rows with the target. |
+| `optimize_threshold` | The score cut of a yes/no capability from the cost of a false alarm and of a miss. |
+| `list_models` | Models, licenses and what is installed. |
+| `read_docs` | This README and the API reference of the installed version, offline, for anything the tools do not cover. |
+
+The agent passes file paths, not rows, so big tables never go through its context. Capabilities are saved in
+`~/.zerograd/capabilities` (`ZEROGRAD_HOME` moves it) and are the same files as `cap.save()`.
+
 ## Licenses and attribution
 
 The SDK is Apache 2.0. Each model has its own license, shown by `zerograd.list_models()`, and **you are
