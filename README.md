@@ -7,11 +7,14 @@
 </p>
 
 <p align="center">
+  <a href="https://zerograd.dev"><img alt="Website: zerograd.dev" src="https://img.shields.io/badge/website-zerograd.dev-black"></a>
   <a href="https://pypi.org/project/zerograd/"><img alt="PyPI" src="https://img.shields.io/pypi/v/zerograd"></a>
   <a href="https://github.com/zerogradlabs/zerograd-python/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zerogradlabs/zerograd-python/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue"></a>
   <a href="https://colab.research.google.com/github/zerogradlabs/zerograd-python/blob/main/examples/quickstart.ipynb"><img alt="Open in Colab" src="https://colab.research.google.com/assets/colab-badge.svg"></a>
 </p>
+
+<p align="center"><a href="https://zerograd.dev"><b>zerograd.dev</b></a> · <a href="https://zerograd.dev/docs">Docs</a> · <a href="https://zerograd.dev/pricing">Platform</a></p>
 
 ## Tabular foundation models
 
