@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+* **MCP server for agents.** `pip install "zerograd[mcp]"` adds `zerograd-mcp`, a local stdio server for Claude Code,
+  Cursor, Codex and other MCP clients, with tools to inspect a table, create, list and evaluate capabilities,
+  predict (to a file, or a few rows inline), explain, pick a threshold, list models and read the docs offline.
+  Capabilities are saved in `~/.zerograd/capabilities`.
+
 ## 0.2.3 (2026-11-14)
 
 * **Install a model from Python.** `zerograd.install_model(name)` runs the model's fixed recipe (pip, pip from git,
