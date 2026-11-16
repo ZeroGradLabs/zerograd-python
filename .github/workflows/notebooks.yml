@@ -1,14 +1,13 @@
 name: Notebooks
 
 # Run every notebook in examples/ on CPU with the real models and open a pull request with their outputs, so the
-# results show on GitHub. On demand, and on each release tag (after the release is published from the same tag).
+# results show on GitHub. On demand only (Actions → Notebooks → Run workflow): the run on release tags is off until
+# it is fixed.
 # A notebook that fails keeps its old outputs and is listed in the run summary.
 # One-time setting: Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
 # Pull requests opened with GITHUB_TOKEN don't start CI by themselves; close and reopen, or push to the branch, to run it.
 on:
   workflow_dispatch:
-  push:
-    tags: ["v*"]
 
 permissions:
   contents: write
