@@ -23,9 +23,9 @@ from typing import Iterator
 PHRASES: dict[str, tuple[str, ...]] = {
     "init": (
         "Hold on tight, going gradless.",
-        "Look mama, no gradients.",
+        "Look mama, no gradients!!",
         "Zero gradients were harmed.",
-        "Skipping the training montage.",
+        "Gradients? Where we're going, we don't need gradients.",
         "Backprop called in sick. We don't need it.",
         "Pretrained on a million worlds. Ready for yours.",
     ),
@@ -47,7 +47,7 @@ PHRASES: dict[str, tuple[str, ...]] = {
     ),
     "predict": (
         "Answers, no epochs.",
-        "Inference at the speed of attention.",
+        "Looks like attention is all you need for tables as well.",
         "One forward pass, as promised.",
     ),
     "champion": (
