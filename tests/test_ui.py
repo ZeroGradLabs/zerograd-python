@@ -47,7 +47,7 @@ def test_greets_once_with_a_phrase(monkeypatch):
 
 def test_enough_phrases_for_every_moment():
     assert sum(len(v) for v in ui.PHRASES.values()) >= 15
-    assert "Look mama, no gradients." in ui.PHRASES["init"]
+    assert "Look mama, no gradients!!" in ui.PHRASES["init"]
     assert {"init", "download", "championship", "fit", "predict", "champion"} <= set(ui.PHRASES)
 
 

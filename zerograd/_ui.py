@@ -23,7 +23,7 @@ from typing import Iterator
 PHRASES: dict[str, tuple[str, ...]] = {
     "init": (
         "Hold on tight, going gradless.",
-        "Look mama, no gradients.",
+        "Look mama, no gradients!!",
         "Zero gradients were harmed.",
         "Skipping the training montage.",
         "Backprop called in sick. We don't need it.",
