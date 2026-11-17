@@ -30,8 +30,9 @@ and others. Each comes with its own package, checkpoints, preprocessing and lice
 
 ## What ZeroGrad does
 
-ZeroGrad puts them behind one interface. The same two calls, `create` and `predict`, work with every model, on your
-machine or on the ZeroGrad platform.
+ZeroGrad puts tabular foundation models (TFMs) behind one interface, and keeps the model zoo up to date as new models
+come out. The same two calls, `create` and `predict`, work with every model, on your machine or on the ZeroGrad
+platform.
 
 It's gradientless tabular ML: no training, no gradient descent, no hyperparameter search. Your rows go in as context
 and a pretrained model predicts from them in a single forward pass. If you've used scikit-learn the interface will
