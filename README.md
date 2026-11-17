@@ -209,6 +209,9 @@ customers.csv and tell me which columns matter."*
 The agent passes file paths, not rows, so big tables never go through its context. Capabilities are saved in
 `~/.zerograd/capabilities` (`ZEROGRAD_HOME` moves it) and are the same files as `cap.save()`.
 
+If your agent writes code with the SDK instead, [AGENTS.md](AGENTS.md) has what it should know, and the docs are at
+[zerograd.dev/llms.txt](https://zerograd.dev/llms.txt) in Markdown.
+
 ## Licenses and attribution
 
 The SDK is Apache 2.0. Each model has its own license, shown by `zerograd.list_models()`, and **you are
