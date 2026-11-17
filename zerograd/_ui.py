@@ -47,7 +47,7 @@ PHRASES: dict[str, tuple[str, ...]] = {
     ),
     "predict": (
         "Answers, no epochs.",
-        "Inference at the speed of attention.",
+        "Looks like attention is all you need for tables as well.",
         "One forward pass, as promised.",
     ),
     "champion": (
