@@ -31,7 +31,23 @@ and others. Each comes with its own package, checkpoints, preprocessing and lice
 ## What ZeroGrad does
 
 ZeroGrad puts them behind one interface. The same two calls, `create` and `predict`, work with every model, on your
-machine or on the ZeroGrad platform. On top of that:
+machine or on the ZeroGrad platform.
+
+It's gradientless tabular ML: no training, no gradient descent, no hyperparameter search. Your rows go in as context
+and a pretrained model predicts from them in a single forward pass. If you've used scikit-learn the interface will
+feel familiar, and `ZeroGradClassifier` and `ZeroGradRegressor` drop straight into pipelines (their `fit` only stores
+your rows as context). From the same `ZeroGrad()` object you get:
+
+* Classification, binary or multiclass (up to 10 classes)
+* Regression on numeric targets
+* Anomaly detection, with the columns behind each flag
+* Imputation of missing values
+* Synthetic data shaped like your table
+* Clustering
+
+Forecasting, causal modeling, marketing mix modeling and recommendations are coming soon.
+
+On top of that:
 
 * **A championship instead of a guess.** Which model is best depends on the data. ZeroGrad scores every model on the
   same holdout of your rows and keeps the best one as the champion, with the comparison in a table.
