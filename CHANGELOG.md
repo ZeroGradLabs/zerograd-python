@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* **Your own estimators in the championship.** `zerograd.register_estimator(name, estimator, regressor=None)` takes
+  anything with `fit(X, y)` and `predict_proba(X)` (classification) or `predict(X)` (regression), from
+  scikit-learn, XGBoost, LightGBM, CatBoost or your own code, and runs it next to the foundation models on the same
+  holdout. It's copied before every fit, NaN is filled with context medians for scikit-learn estimators that don't
+  accept it, and it works with `cross_validate`, `save`/`load` and `ZeroGradClassifier(model=name)`.
+
 ## 0.2.4 (2026-11-15)
 
 * **MCP server for agents.** `pip install "zerograd[mcp]"` adds `zerograd-mcp`, a local stdio server for Claude Code,
