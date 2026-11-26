@@ -112,8 +112,9 @@ def test_hf_token_notice_is_hidden_during_downloads(monkeypatch, caplog):
 
     monkeypatch.delenv("ZEROGRAD_SHOW_HF_WARNINGS", raising=False)
     log = logging.getLogger("huggingface_hub.utils._http")
+    before = logging.getLogger("huggingface_hub").level  # importing some model packages sets it
     with caplog.at_level(logging.WARNING), quiet_hub():
         log.warning("Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN.")
         log.error("a real error")
     assert "unauthenticated" not in caplog.text and "a real error" in caplog.text
-    assert logging.getLogger("huggingface_hub").level == logging.NOTSET  # restored
+    assert logging.getLogger("huggingface_hub").level == before  # restored
