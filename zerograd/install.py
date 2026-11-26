@@ -36,6 +36,7 @@ RECIPES: dict[str, Recipe] = {
     "mitra-v2": Recipe(pip=("autogluon.tabular[mitra]>=1.6",)),
     "mitra": Recipe(pip=("autogluon.tabular[mitra]>=1.6",)),
     "tabdpt": Recipe(pip=("tabdpt>=1.1",)),
+    "matrixformer": Recipe(pip=("matrixformer @ git+https://github.com/jacobf18/MatrixFormer.git",)),
     "tabfm": Recipe(pip=("tabfm[pytorch]",)),
     "exaone-tabular": Recipe(pip=("exaonetabular @ git+https://github.com/LGAI-Research/EXAONE-Tabular.git",)),
     "limix-2": Recipe(git="https://github.com/limix-ldm-ai/LimiX", python=(3, 12)),

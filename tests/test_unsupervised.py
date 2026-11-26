@@ -218,3 +218,29 @@ def test_zeus_checkpoint_must_match_its_hash(tmp_path, monkeypatch):
 
     monkeypatch.setattr(u, "ZEUS_SHA256", hashlib.sha256(good).hexdigest())
     assert u.zeus_path() == str(cached)
+
+
+def test_impute_with_a_dedicated_imputer(unsup_models):
+    """A model with impute_fn (like MatrixFormer) fills the gaps itself; categories come back as existing codes."""
+    def column_means(X):
+        out = X.copy()
+        means = np.nanmean(X, axis=0)
+        rows, cols = np.where(np.isnan(out))
+        out[rows, cols] = means[cols] + 0.3  # off-code on purpose
+        return out
+
+    register_model(_spec("test-imputer", fit_fn=None, impute_fn=column_means, tasks=("imputation",)), replace=True)
+    try:
+        df = customers().drop(columns=["fraud"])
+        holes = df.copy()
+        rng = np.random.default_rng(2)
+        holes.loc[rng.choice(len(df), 30, replace=False), "income"] = np.nan
+        holes.loc[rng.choice(len(df), 20, replace=False), "segment"] = None
+        assert "test-imputer" in [s.name for s in candidates("imputation", ["test-imputer"])]
+        res = impute(holes, models=["test-imputer", "mean-mode"], progress=False)
+        assert set(res.evaluation.index) == {"test-imputer", "mean-mode"}
+        assert res.data["income"].isna().sum() == 0 and set(res.data["segment"]) <= {"premium", "standard"}
+        kept = holes["income"].notna()
+        assert (res.data.loc[kept, "income"] == holes.loc[kept, "income"]).all()  # observed cells untouched
+    finally:
+        unregister_model("test-imputer")

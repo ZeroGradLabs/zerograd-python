@@ -64,6 +64,22 @@ def test_real_anomaly_detection(name):
     assert res.evaluation.loc[name, "roc_auc"] > 0.75, res.evaluation
 
 
+def test_real_matrixformer_imputation():
+    import numpy as np
+
+    from zerograd.unsupervised import impute
+
+    if not zerograd.models.get_model("matrixformer").available:
+        pytest.skip("matrixformer is not installed")
+    df = _customers().drop(columns=["fraud", "customer_id"])
+    holes = df.copy()
+    holes.loc[np.random.default_rng(0).choice(len(df), 40, replace=False), "income"] = np.nan
+    res = impute(holes, models=["matrixformer", "mean-mode"], progress=False)
+    ev = res.evaluation
+    assert ev.loc["matrixformer", "error:income"] < ev.loc["mean-mode", "error:income"], ev
+    assert res.data["income"].isna().sum() == 0
+
+
 @pytest.mark.parametrize("name", ["tabpfn-v2", "tabicl-v2"])
 def test_real_imputation_and_synthesis(name):
     import numpy as np
