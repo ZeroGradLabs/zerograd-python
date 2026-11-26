@@ -23,6 +23,9 @@ def test_every_recipe_names_a_model_and_matches_the_extras():
     assert list(inst.RECIPES["mitra-v2"].pip) == extra("mitra")
     assert list(inst.RECIPES["mitra"].pip) == extra("mitra")
     assert list(inst.RECIPES["tabdpt"].pip) == extra("tabdpt")
+    for name in ("kumo-tabular", "kumo-tabular-medium", "kumo-tabular-small"):  # the extra adds a Python marker
+        assert list(inst.RECIPES[name].pip) == [r.split(";")[0].strip() for r in extra("kumo")]
+        assert inst.RECIPES[name].python == (3, 11)
 
 
 def test_noncommercial_needs_the_license_accepted():
