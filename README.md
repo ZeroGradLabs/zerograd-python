@@ -136,13 +136,14 @@ In a notebook these render as tables with a badge for commercial and non-commerc
 | TabICLv2 | `tabicl-v2` | BSD-3-Clause | yes | yes |
 | Mitra-v2 | `mitra-v2` | Apache 2.0 | yes | yes, with `pip install "zerograd[mitra]"` |
 | TabDPT | `tabdpt` | Apache 2.0 | yes | yes, with `pip install "zerograd[tabdpt]"` |
+| Inpriora (Ant Group) | `inpriora` | Apache 2.0 | yes | yes, with `zerograd.install_model("inpriora")` |
 | Mitra | `mitra` | Apache 2.0 | yes | by name |
 | FoMo-0D | `fomo-0d` | MIT | yes | anomaly detection |
 | ZEUS | `zeus` | Apache 2.0 | yes | clustering |
 
 The full list, with sources and the models that are off by default, is in [MODELS.md](MODELS.md).
 This version runs **classification** (binary and multiclass, up to 10 classes) and **regression** (locally, with
-TabPFN v2, TabICLv2 and TabDPT), plus four tasks with no target: anomaly detection, imputation, synthetic data and
+TabPFN v2, TabICLv2, TabDPT and Inpriora), plus four tasks with no target: anomaly detection, imputation, synthetic data and
 clustering. `zerograd.list_tasks()` shows which models run each task.
 
 ## Benchmark

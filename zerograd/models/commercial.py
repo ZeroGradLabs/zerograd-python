@@ -7,6 +7,7 @@
 | Mitra-v2   | Apache 2.0                                | huggingface.co/autogluon/mitra-classifier-2 |
 | Mitra      | Apache 2.0                                | huggingface.co/autogluon/mitra-classifier |
 | TabDPT     | Apache 2.0                                | huggingface.co/Layer6/TabDPT         |
+| Inpriora   | Apache 2.0                                | huggingface.co/ai-for-data/inpriora  |
 """
 
 from __future__ import annotations
@@ -181,6 +182,40 @@ def _tabdpt_regress(X: np.ndarray, y: np.ndarray, serving: bool) -> FittedRegres
     return Point(model, predict=lambda Xq: model.predict(Xq, n_ensembles=8, context_size=2048, seed=0))
 
 
+# ---------------------------------------------------------------- Inpriora (Ant Group)
+# Code and weights Apache 2.0. The package installs from the authors' GitHub. One checkpoint per task, each a folder
+# with config.json and model.safetensors; we download them through zerograd.weights and pass the folder.
+INPRIORA_REPO = "ai-for-data/inpriora"
+INPRIORA_GIT = "git+https://github.com/ai-for-data/inpriora.git"
+
+
+def _inpriora_files(kind: str) -> list[tuple[str, str]]:
+    return [(INPRIORA_REPO, f"{kind}/config.json"), (INPRIORA_REPO, f"{kind}/model.safetensors")]
+
+
+def _inpriora_dir(kind: str) -> str:
+    from ..weights import hub_file
+
+    paths = [hub_file(repo, f, model="inpriora") for repo, f in _inpriora_files(kind)]
+    return os.path.dirname(paths[-1])
+
+
+def _inpriora_fit(X: np.ndarray, y: np.ndarray, n_classes: int, serving: bool) -> FittedModel:
+    from inpriora import InprioraClassifier
+
+    model = InprioraClassifier(model_path=_inpriora_dir("classifier"), device=device(), random_seed=0)
+    model.fit(X, y)
+    return Aligned(model, n_classes)
+
+
+def _inpriora_regress(X: np.ndarray, y: np.ndarray, serving: bool) -> FittedRegressor:
+    from inpriora import InprioraRegressor
+
+    model = InprioraRegressor(model_path=_inpriora_dir("regressor"), device=device(), random_seed=0)
+    model.fit(X, y)
+    return Point(model)
+
+
 TABPFN_V2 = register_model(ModelSpec(
     name="tabpfn-v2",
     display="TabPFN v2",
@@ -268,4 +303,23 @@ TABDPT = register_model(ModelSpec(
     regress_fn=_tabdpt_regress,
     regression_weights_fn=_tabdpt_weights,  # one checkpoint for both tasks
     check_fn=missing("tabdpt"),
+))
+
+INPRIORA = register_model(ModelSpec(
+    name="inpriora",
+    display="Inpriora",
+    family="Inpriora",
+    license="Apache 2.0",
+    license_url="https://huggingface.co/ai-for-data/inpriora/blob/main/LICENSE",
+    source=f"huggingface.co/{INPRIORA_REPO}",
+    commercial=True,
+    install=f'pip install "inpriora @ {INPRIORA_GIT}"',
+    max_classes=10,
+    notes="Ant Group's Inpriora, zero-shot. Its package installs from the authors' GitHub.",
+    tasks=("classification", "regression"),
+    fit_fn=_inpriora_fit,
+    weights_fn=lambda: _inpriora_files("classifier"),
+    regress_fn=_inpriora_regress,
+    regression_weights_fn=lambda: _inpriora_files("regressor"),
+    check_fn=missing("inpriora"),
 ))
