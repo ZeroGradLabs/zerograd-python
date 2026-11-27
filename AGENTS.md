@@ -28,6 +28,8 @@ cap.save("churn.zg"); cap = zerograd.load("churn.zg")
 
 Things that are easy to get wrong:
 
+- The leaderboard has an `Ensemble (...)` row: the equal-weight average of every model that finished. It can be the
+  champion, and then every prediction runs all its members. `create(..., ensemble=False)` leaves it out.
 - The task comes from the target column. Categories, booleans and whole numbers with up to 10 distinct values are a
   classification; other numbers are a regression. Pass `task="classification"` or `task="regression"` to force it.
 - Drop columns that are only known after the outcome (a cancellation reason, a chargeback date) with `drop=[...]`.
