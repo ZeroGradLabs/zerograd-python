@@ -11,6 +11,7 @@ from . import noncommercial as _noncommercial  # noqa: F401  (registers the non-
 from . import unsupervised as _unsupervised  # noqa: F401  (FoMo-0D and ZEUS: anomaly detection and clustering)
 from .catalog import ModelCatalog, TaskCatalog, list_models, list_tasks, model_info
 from .commercial import LicenseGuardError, assert_tabpfn_v2_checkpoint
+from .estimator import register_estimator
 from .registry import (
     TASKS,
     Aligned,
@@ -28,7 +29,7 @@ from .registry import (
 
 __all__ = [
     "ModelSpec", "FittedModel", "FittedRegressor", "Aligned", "Point", "NonCommercialModelWarning", "LicenseGuardError",
-    "register_model", "unregister_model", "get_model", "all_models", "resolve_models", "list_models",
+    "register_model", "register_estimator", "unregister_model", "get_model", "all_models", "resolve_models", "list_models",
     "list_tasks", "model_info", "ModelCatalog", "TaskCatalog", "TASKS",
     "assert_tabpfn_v2_checkpoint",
 ]

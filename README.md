@@ -55,7 +55,8 @@ On top of that:
 * **Licenses you can see.** Some models allow commercial use and some do not. `zerograd.list_models()` shows each
   license and where the weights come from; non-commercial models stay off unless you enable them by name.
 * **Local or cloud, same code.** Locally, nothing leaves your machine. With `remote=True` the same capability runs on
-  the platform, with versions, scheduled championships, monitoring and batch pipelines.
+  the platform, with versions, scheduled championships, monitoring and batch pipelines. The platform is in private
+  preview, so keys aren't self-serve yet.
 
 ## Quickstart
 
@@ -179,8 +180,8 @@ Everything below is explained, with code, in the [docs](https://zerograd.dev/doc
 * **[No target](https://zerograd.dev/docs#no-target):** [anomaly detection](https://zerograd.dev/docs#anomaly-detection) with the columns why, [imputation](https://zerograd.dev/docs#imputation), [synthetic data](https://zerograd.dev/docs#synthetic-data) and [clustering](https://zerograd.dev/docs#clustering).
 * **[Privacy](https://zerograd.dev/docs#privacy):** find and drop sensitive columns, or pseudonymize them with a local vault, before anything leaves your machine.
 * **Save and open:** `cap.save()` writes one file and `zerograd.load()` opens it again.
-* **Bring your own model:** plug any model into the championship with `zerograd.register_model`.
-* **[The ZeroGrad platform](https://zerograd.dev/docs#platform):** with `remote=True` the same code runs on the platform, with versions, scheduled championships, monitoring and batch pipelines.
+* **Bring your own model:** `zerograd.register_estimator("hgb", HistGradientBoostingClassifier())` puts any estimator with `fit` and `predict_proba` (or `predict`, for regression) in the championship: scikit-learn, XGBoost, LightGBM, CatBoost or your own class. For a full adapter with license and weights, use `zerograd.register_model`.
+* **[The ZeroGrad platform](https://zerograd.dev/docs#platform):** with `remote=True` the same code runs on the platform (private preview), with versions, scheduled championships, monitoring and batch pipelines.
 
 ## Use it from an agent (MCP)
 

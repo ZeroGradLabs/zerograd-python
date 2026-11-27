@@ -225,7 +225,8 @@ def _drop_reason(name: str, s: pd.Series, n: int) -> str | None:
     nunique = s.nunique(dropna=True)
     if nunique <= 1 and s.isna().sum() == 0:
         return "constant"
-    is_text = s.dtype == object or isinstance(s.dtype, pd.StringDtype)
+    is_text = ((s.dtype == object or isinstance(s.dtype, pd.StringDtype))
+               and not _looks_like_numbers(s) and not _looks_like_dates(s))
     if _ID_NAME.match(name) and nunique >= 0.95 * non_null:
         return "identifier"
     if pd.api.types.is_integer_dtype(s) and nunique == n and n > 50 and _is_sequence(s):
@@ -233,6 +234,38 @@ def _drop_reason(name: str, s: pd.Series, n: int) -> str | None:
     if is_text and nunique > 20 and nunique > 0.5 * non_null:
         return "free text or high-cardinality id"
     return None
+
+
+def _looks_like_numbers(s: pd.Series) -> bool:
+    """Text that is really numbers ("3.5", "12"): kept as a number, not as text (the same test `_profile` uses)."""
+    non_null = s.notna().sum()
+    return bool(non_null > 0 and pd.to_numeric(s, errors="coerce").notna().sum() >= 0.98 * non_null)
+
+
+def _looks_like_dates(s: pd.Series) -> bool:
+    """Text that is really dates ("2024-01-31", "2024-01-31 10:00"), as a CSV gives them: kept as a date, not as text."""
+    if not (s.dtype == object or isinstance(s.dtype, pd.StringDtype)):
+        return False
+    values = s.dropna()
+    if values.empty or not all(isinstance(v, str) for v in values.head(50)):
+        return False
+    sample = values.astype(str).head(500)
+    if pd.to_numeric(sample, errors="coerce").notna().mean() > 0.5:
+        return False  # numbers in text form stay numbers
+    parsed = _parse_dates(sample, "ISO8601")
+    return bool(parsed.notna().mean() >= 0.98)
+
+
+def _parse_dates(s: pd.Series, fmt: str) -> pd.Series:
+    """UTC timestamps, NaT where a value is not a date. `fmt` ("ISO8601", "mixed") needs pandas 2."""
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # pandas warns when it falls back to parsing one value at a time
+        try:
+            return pd.to_datetime(s, errors="coerce", format=fmt, utc=True)
+        except (TypeError, ValueError):  # pandas 1.5
+            return pd.to_datetime(s, errors="coerce", utc=True)
 
 
 def _is_sequence(s: pd.Series) -> bool:
@@ -245,11 +278,10 @@ def _profile(name: str, s: pd.Series) -> Column:
         return Column(name, "boolean")
     if pd.api.types.is_numeric_dtype(s):
         return Column(name, "numeric")
-    if pd.api.types.is_datetime64_any_dtype(s):
+    if pd.api.types.is_datetime64_any_dtype(s) or _looks_like_dates(s):
         return Column(name, "datetime")
     # Strings that are really numbers ("3.5", "12") stay numeric.
-    as_num = pd.to_numeric(s, errors="coerce")
-    if s.notna().sum() > 0 and as_num.notna().sum() >= 0.98 * s.notna().sum():
+    if _looks_like_numbers(s):
         return Column(name, "numeric")
     cats = sorted({str(v) for v in s.dropna().unique()})
     return Column(name, "categorical", categories=cats)
@@ -261,7 +293,8 @@ def _encode(col: Column, s: pd.Series) -> np.ndarray:
     if col.kind == "boolean":
         return s.map(lambda v: np.nan if pd.isna(v) else float(bool(v))).to_numpy(dtype=np.float32)
     if col.kind == "datetime":
-        ts = pd.to_datetime(s, errors="coerce", utc=True)
+        ts = (pd.to_datetime(s, errors="coerce", utc=True) if pd.api.types.is_datetime64_any_dtype(s)
+              else _parse_dates(s.astype(object).where(s.notna(), None), "mixed"))
         days = (ts - pd.Timestamp("1970-01-01", tz="UTC")).dt.total_seconds() / 86400.0
         return days.to_numpy(dtype=np.float32, na_value=np.nan)
     lookup = {c: float(i) for i, c in enumerate(col.categories)}

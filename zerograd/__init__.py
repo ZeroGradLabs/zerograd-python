@@ -33,14 +33,22 @@ from .install import install_model
 from .local import LocalCapability, LocalZeroGrad, load
 from .local.threshold import ThresholdResult
 from .local.validation import CVResult
-from .models import LicenseGuardError, NonCommercialModelWarning, list_models, list_tasks, model_info, register_model
+from .models import (
+    LicenseGuardError,
+    NonCommercialModelWarning,
+    list_models,
+    list_tasks,
+    model_info,
+    register_estimator,
+    register_model,
+)
 from .privacy import SensitiveDataWarning, Vault, drop_sensitive, scan
 from .unsupervised import AnomalyResult, ClusterResult, ImputeResult, SyntheticResult
 from .weights import cached_weights, config, download, remove_weights
 
 __all__ = [
     "ZeroGrad", "LocalZeroGrad", "RemoteZeroGrad", "LocalCapability", "Capability", "Run", "Pipeline", "load", "ContextCurve",
-    "list_models", "list_tasks", "model_info", "register_model", "NonCommercialModelWarning", "LicenseGuardError",
+    "list_models", "list_tasks", "model_info", "register_model", "register_estimator", "NonCommercialModelWarning", "LicenseGuardError",
     "ZeroGradError", "AuthError", "NotFoundError", "ValidationError", "LimitError",
     "RunFailedError", "APIError", "UsageWarning",
     "Vault", "scan", "drop_sensitive", "SensitiveDataWarning",
