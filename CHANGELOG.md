@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* **Leakage and duplicate checks.** Before the championship, `create` warns when one column alone predicts the
+  target almost perfectly (ROC AUC, balanced accuracy or R² of 0.98 or more on rows a one-column tree didn't see),
+  which usually means it's only known after the outcome, and when 10% or more of the holdout rows also appear,
+  column for column, in the context. The warnings print before the podium, stay on `cap.warnings` (saved with the
+  capability) and come back from the MCP's `create_capability`. They only warn: `drop=[...]` is your call.
+
 ## 0.2.5 (2026-11-27)
 
 * **TabDPT 1.3.** The `tabdpt` extra and `install_model("tabdpt")` now require tabdpt 1.3, which loads the newer

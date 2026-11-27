@@ -43,8 +43,9 @@ matter; optimize_threshold picks the score cut of a yes/no capability from the c
 When the tools do not cover something (anomalies, imputation, cross-validation by time, scikit-learn,
 privacy...), read_docs has the SDK docs and API reference: write a short Python script with `import zerograd`.
 Pass file paths, not rows. Everything runs on this machine: nothing is uploaded.
-Quote the champion's metric next to the baseline when you report a result, and show the attribution line when a
-tool returns one (some model licenses ask for it)."""
+If create_capability returns warnings (a column that alone predicts the target, duplicated rows), tell the user before
+quoting any score. Quote the champion's metric next to the baseline when you report a result, and show the
+attribution line when a tool returns one (some model licenses ask for it)."""
 
 
 def _home() -> Path:
@@ -289,6 +290,8 @@ class Workbench:
             out["threshold"] = cap.threshold
         if cap.errors:
             out["errors"] = cap.errors
+        if getattr(cap, "warnings", None):
+            out["warnings"] = [w["message"] for w in cap.warnings]
         if cap.attribution:
             out["attribution"] = cap.attribution
         return out
