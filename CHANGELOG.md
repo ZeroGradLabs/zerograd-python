@@ -16,6 +16,10 @@
   which usually means it's only known after the outcome, and when 10% or more of the holdout rows also appear,
   column for column, in the context. The warnings print before the podium, stay on `cap.warnings` (saved with the
   capability) and come back from the MCP's `create_capability`. They only warn: `drop=[...]` is your call.
+* **Technical ties in the podium.** A paired bootstrap of the holdout gives every model a 90% interval of the
+  selection metric (`ci_low`, `ci_high` in `cap.evaluation`) and marks with `tied` the ones the holdout can't tell
+  apart from the champion. The podium shows them with "≈ tied" and a note under the champion line, so a gap of
+  0.002 AUC on 300 rows doesn't read as a win.
 
 ## 0.2.5 (2026-11-27)
 
