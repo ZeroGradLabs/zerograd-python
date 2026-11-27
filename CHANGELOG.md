@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* **Ensemble in the championship.** When two or more models finish, their equal-weight average competes as one more
+  candidate, `Ensemble (TabPFN v2 + TabICLv2 + ...)`, on the same holdout. Nothing is tuned on the holdout, so its
+  score is as honest as each member's. It has to beat the best single model to be champion (a tie goes to the single
+  model, which predicts with one model instead of all), and `zg.create(..., ensemble=False)` leaves it out. An
+  ensemble champion saves, loads and keeps each member's license gate and attribution.
+
 ## 0.2.5 (2026-11-27)
 
 * **TabDPT 1.3.** The `tabdpt` extra and `install_model("tabdpt")` now require tabdpt 1.3, which loads the newer

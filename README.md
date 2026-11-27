@@ -51,7 +51,8 @@ Forecasting, causal modeling, marketing mix modeling and recommendations are com
 On top of that:
 
 * **A championship instead of a guess.** Which model is best depends on the data. ZeroGrad scores every model on the
-  same holdout of your rows and keeps the best one as the champion, with the comparison in a table.
+  same holdout of your rows, adds their average as one more candidate (the ensemble), and keeps the best one as the
+  champion, with the comparison in a table.
 * **Licenses you can see.** Some models allow commercial use and some do not. `zerograd.list_models()` shows each
   license and where the weights come from; non-commercial models stay off unless you enable them by name.
 * **Local or cloud, same code.** Locally, nothing leaves your machine. With `remote=True` the same capability runs on
