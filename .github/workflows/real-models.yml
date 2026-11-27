@@ -17,6 +17,7 @@ jobs:
       - run: uv pip install -e ".[all,dev]" --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
       # Models whose package installs from the authors' GitHub (PyPI can't carry them in an extra)
       - run: uv pip install "matrixformer @ git+https://github.com/jacobf18/MatrixFormer.git"
+      - run: uv pip install "inpriora @ git+https://github.com/ai-for-data/inpriora.git"
       - run: uv run pytest -q tests/test_real_models.py
         env:
           ZEROGRAD_REAL_MODELS: "1"

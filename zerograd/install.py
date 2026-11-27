@@ -39,6 +39,7 @@ RECIPES: dict[str, Recipe] = {
     **{name: Recipe(pip=("structured-data-models>=0.3",), python=(3, 11))
        for name in ("kumo-tabular", "kumo-tabular-medium", "kumo-tabular-small")},
     "matrixformer": Recipe(pip=("matrixformer @ git+https://github.com/jacobf18/MatrixFormer.git",)),
+    "inpriora": Recipe(pip=("inpriora @ git+https://github.com/ai-for-data/inpriora.git",)),
     "tabfm": Recipe(pip=("tabfm[pytorch]",)),
     "exaone-tabular": Recipe(pip=("exaonetabular @ git+https://github.com/LGAI-Research/EXAONE-Tabular.git",)),
     "limix-2": Recipe(git="https://github.com/limix-ldm-ai/LimiX", python=(3, 12)),

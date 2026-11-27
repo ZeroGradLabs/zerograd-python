@@ -8,6 +8,8 @@
 * **MatrixFormer for imputation.** `zerograd.install_model("matrixformer")` adds the TabImpute authors' zero-shot
   matrix-completion model (Apache 2.0) to the `zg.impute` championship. Models can now fill a table themselves
   (`ModelSpec.impute_fn`) instead of going through the chain rule.
+* **Inpriora (Ant Group).** `zerograd.install_model("inpriora")` adds Inpriora (code and weights Apache 2.0) to the
+  default championship for classification and regression.
 * **Your own estimators in the championship.** `zerograd.register_estimator(name, estimator, regressor=None)` takes
   anything with `fit(X, y)` and `predict_proba(X)` (classification) or `predict(X)` (regression), from
   scikit-learn, XGBoost, LightGBM, CatBoost or your own code, and runs it next to the foundation models on the same

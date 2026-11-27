@@ -14,6 +14,7 @@ ZeroGrad hosts no weights: each model downloads them from its author's repositor
 | Kumo-Tabular | `kumo-tabular` | classification, regression | [OpenMDW-1.1 (code Apache 2.0)](https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE) | huggingface.co/nvidia/Kumo-Tabular | `pip install "zerograd[kumo]"` | no |
 | Kumo-Tabular Medium | `kumo-tabular-medium` | classification, regression | [OpenMDW-1.1 (code Apache 2.0)](https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE) | huggingface.co/nvidia/Kumo-Tabular | `pip install "zerograd[kumo]"` | no |
 | Kumo-Tabular Small | `kumo-tabular-small` | classification, regression | [OpenMDW-1.1 (code Apache 2.0)](https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE) | huggingface.co/nvidia/Kumo-Tabular | `pip install "zerograd[kumo]"` | no |
+| Inpriora | `inpriora` | classification, regression | [Apache 2.0](https://huggingface.co/ai-for-data/inpriora/blob/main/LICENSE) | huggingface.co/ai-for-data/inpriora | `pip install "inpriora @ git+https://github.com/ai-for-data/inpriora.git"` or `zerograd.install_model("inpriora")` | no |
 | Mitra | `mitra` | classification, (regression) | [Apache 2.0](https://huggingface.co/autogluon/mitra-classifier) | huggingface.co/autogluon/mitra-classifier | `pip install "zerograd[mitra]"` | no |
 | FoMo-0D | `fomo-0d` | anomaly detection | [MIT](https://github.com/A-Chicharito-S/FoMo-0D/blob/main/LICENSE) | huggingface.co/YuchenShen/FoMo-0D | `pip install zerograd` | no |
 | MatrixFormer | `matrixformer` | imputation | [Apache 2.0](https://huggingface.co/Tabimpute/MatrixFormer) | huggingface.co/Tabimpute/MatrixFormer | `pip install "matrixformer @ git+https://github.com/jacobf18/MatrixFormer.git"` or `zerograd.install_model("matrixformer")` | no |
@@ -53,7 +54,7 @@ The TabFM, EXAONE Tabular and LimiX-2 adapters follow each project's published u
 | Task | In this version | Description |
 |---|---|---|
 | Classification | yes | Predict a category: binary (churn, fraud, default) or multiclass (up to 10 classes). |
-| Regression | yes, locally | Predict a number (amount, price, demand, time) with TabPFN v2, TabICLv2, TabDPT and Kumo-Tabular (and TabPFN 2.5+, non-commercial). Not with `remote=True` yet. |
+| Regression | yes, locally | Predict a number (amount, price, demand, time) with TabPFN v2, TabICLv2, TabDPT, Kumo-Tabular and Inpriora (and TabPFN 2.5+, non-commercial). Not with `remote=True` yet. |
 | Anomaly detection | yes, locally | `zg.anomalies(df)`: every row scored, the unusual ones flagged, with the columns why. TabPFN v2, TabICLv2, FoMo-0D; Isolation Forest, LOF and kNN to compare. |
 | Imputation | yes, locally | `zg.impute(df)`: a championship on hidden cells (TabPFN v2, TabICLv2 and MatrixFormer when installed, against mean/mode, KNN and iterative imputation), then the champion fills the gaps. |
 | Synthetic data | yes, locally | `zg.synthesize(df, n)`: new rows scored by how hard they are to tell apart from yours (detection AUC) and exact copies. TabPFN v2, TabICLv2. |
