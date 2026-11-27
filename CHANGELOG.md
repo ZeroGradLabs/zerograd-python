@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+* **Dates and numbers that arrive as text are kept.** A date column read from a CSV ("2024-01-31") used to be dropped
+  as free text; it is now read as a date. Numbers in text form with many distinct values ("12.50") are now read as
+  numbers instead of being dropped.
+
 ## 0.2.4 (2026-11-15)
 
 * **MCP server for agents.** `pip install "zerograd[mcp]"` adds `zerograd-mcp`, a local stdio server for Claude Code,
