@@ -34,7 +34,8 @@ def test_create_evaluate_predict_and_reopen(bench, files, tmp_path):
     train, new, test = files
     out = bench.create_capability("titanic", str(train), "Survived")
     assert out["champion"] == "test-logreg" and out["score"] > 0.5 and not out["replaced"]
-    assert {r["model"] for r in out["leaderboard"]} == {"test-logreg", "test-prior"}
+    assert {r["model"] for r in out["leaderboard"]} == {"test-logreg", "test-prior",
+                                                         "Ensemble (test-logreg + test-prior)"}
 
     fresh = Workbench(bench.home)  # a new session reads the saved file
     assert [c["name"] for c in fresh.list_capabilities()["capabilities"]] == ["titanic"]

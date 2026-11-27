@@ -69,7 +69,7 @@ class LocalZeroGrad:
         return df
 
     def create(self, name: str, examples: Any, target: str, *, drop: Iterable[str] | None = None,
-               metric: str | None = None, task: str | None = None) -> "LocalCapability":
+               metric: str | None = None, task: str | None = None, ensemble: bool = True) -> "LocalCapability":
         """Run the championship on labeled history and return the capability with its champion.
 
         `examples` is a DataFrame or a CSV/Parquet path. `task` is "classification" or "regression"; left out,
@@ -77,6 +77,9 @@ class LocalZeroGrad:
         `metric` picks the champion. Classification: roc_auc (default), pr_auc, log_loss, accuracy,
         balanced_accuracy, f1, precision or recall (binary), f1_macro (multiclass). Regression: rmse (default),
         mae or r2.
+
+        With two or more models that finish, their equal-weight average (the ensemble) competes too, and can be
+        the champion. It predicts with every member, so it costs their sum; `ensemble=False` leaves it out.
         """
         from .._remote import to_frame
 
@@ -103,7 +106,7 @@ class LocalZeroGrad:
             result = champ.run_championship(
                 pre, kept, specs, max_context_rows=lim["max_context_rows"],
                 holdout_fraction=lim["holdout_fraction"], chunk=lim["predict_chunk_rows"], progress=live.progress,
-                max_holdout_rows=lim["max_holdout_rows"], metric=metric,
+                max_holdout_rows=lim["max_holdout_rows"], metric=metric, ensemble=ensemble,
             )
         finally:
             live.close()
@@ -794,8 +797,12 @@ def _models_line(specs: list[ModelSpec]) -> str:
 
 def _prefetch(specs: list[ModelSpec], ui: Console, task: str = "classification") -> None:
     """Download missing weights up front, with a clear line, so they never fight with a spinner."""
+    from ..models import get_model
     from ..weights import hub_file, missing_files
 
+    # an ensemble downloads each member's weights
+    specs = [get_model(m) for s in specs for m in s.extra.get("members", [])] + [s for s in specs
+                                                                                if not s.extra.get("members")]
     for spec in specs:
         todo = missing_files(spec, task)
         if not todo:

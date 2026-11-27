@@ -28,6 +28,8 @@ cap.save("churn.zg"); cap = zerograd.load("churn.zg")
 
 Things that are easy to get wrong:
 
+- The leaderboard has an `Ensemble (...)` row: the equal-weight average of every model that finished. It can be the
+  champion, and then every prediction runs all its members. `create(..., ensemble=False)` leaves it out.
 - When new labeled rows arrive, `cap.add_examples(rows)` puts them in the context with no retraining. It doesn't
   re-run the championship; call `zg.create` again for that.
 - The task comes from the target column. Categories, booleans and whole numbers with up to 10 distinct values are a
