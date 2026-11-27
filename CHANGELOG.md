@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.5 (2026-11-27)
 
+* **TabDPT 1.3.** The `tabdpt` extra and `install_model("tabdpt")` now require tabdpt 1.3, which loads the newer
+  `tabdpt1_3` weights.
 * **Kumo-Tabular (NVIDIA).** `kumo-tabular` joins the default championship for classification and regression when
   installed with `pip install "zerograd[kumo]"` (Python 3.11+); `kumo-tabular-medium` and `kumo-tabular-small` are
   lighter checkpoints you run by name. Weights under OpenMDW-1.1, code Apache 2.0.
