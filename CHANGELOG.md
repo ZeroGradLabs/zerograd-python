@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-27)
 
 * **Ensemble in the championship.** When two or more models finish, their equal-weight average competes as one more
   candidate, `Ensemble (TabPFN v2 + TabICLv2 + ...)`, on the same holdout. Nothing is tuned on the holdout, so its
