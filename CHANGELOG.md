@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* **Ensemble in the championship.** When two or more models finish, their equal-weight average competes as one more
+  candidate, `Ensemble (TabPFN v2 + TabICLv2 + ...)`, on the same holdout. Nothing is tuned on the holdout, so its
+  score is as honest as each member's. It has to beat the best single model to be champion (a tie goes to the single
+  model, which predicts with one model instead of all), and `zg.create(..., ensemble=False)` leaves it out. An
+  ensemble champion saves, loads and keeps each member's license gate and attribution.
+* **New rows without retraining.** `cap.add_examples(rows)` adds labeled rows to the capability's context and the
+  next prediction reads them, with no training and no new championship. New rows always stay; past the context
+  limit (`max_context_rows=`, 10,000 by default) the older rows are sampled down. Classes the capability has never
+  seen are refused, since adding a class needs a new `create`.
 * **Leakage and duplicate checks.** Before the championship, `create` warns when one column alone predicts the
   target almost perfectly (ROC AUC, balanced accuracy or R² of 0.98 or more on rows a one-column tree didn't see),
   which usually means it's only known after the outcome, and when 10% or more of the holdout rows also appear,

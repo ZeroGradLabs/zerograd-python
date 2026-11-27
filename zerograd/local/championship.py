@@ -7,9 +7,10 @@ Same procedure as the ZeroGrad platform, so a local result and a cloud result ar
 2. Build the context from the rest: all of it, or a stratified sample when it is bigger than the limit.
 3. For each model: fit on the context, score the whole holdout, compute the task's metrics and the
    curves the dashboard plots (confusion matrix; ROC and precision-recall for binary tasks).
-4. Champion = best value of the capability's selection metric (default ROC AUC, or RMSE for regression;
+4. With two or more models that finished, add their equal-weight average (the ensemble) as one more candidate.
+5. Champion = best value of the capability's selection metric (default ROC AUC, or RMSE for regression;
    ties: lower log loss). Regression splits and samples are stratified on quantile bins of the target.
-5. The capability keeps a fresh context drawn from *all* labeled rows, so production predictions see
+6. The capability keeps a fresh context drawn from *all* labeled rows, so production predictions see
    the most history the limit allows.
 """
 
@@ -265,6 +266,7 @@ class Candidate:
     seconds: float
     error: str | None = None
     plots: dict | None = None
+    output: np.ndarray | None = None  # holdout probabilities (or predictions); kept in memory, never saved
 
     def to_dict(self) -> dict:
         return {"model": self.model, "display": self.display, **self.metrics, "seconds": round(self.seconds, 2),
@@ -285,7 +287,8 @@ def rank_key(metric: str = DEFAULT_METRIC) -> Callable[[Candidate], tuple]:
     def key(c: Candidate) -> tuple:
         s = score(c.metrics, metric)
         ll = c.metrics.get("log_loss")
-        return (c.error is None, s is not None, s if s is not None else 0.0, -(ll if ll is not None else 1e9))
+        single = not c.model.startswith("ensemble:")  # a tie goes to the single model: it costs one model, not all
+        return (c.error is None, s is not None, s if s is not None else 0.0, single, -(ll if ll is not None else 1e9))
 
     return key
 
@@ -335,14 +338,32 @@ def evaluate(
             if not np.all(np.isfinite(pred)):
                 raise ValueError("the model returned NaN or infinite predictions")
             return Candidate(spec.name, spec.display, regression_metrics(y_hold, pred), time.monotonic() - t0,
-                             plots=regression_plots(y_hold, pred))
+                             plots=regression_plots(y_hold, pred), output=pred)
         proba = np.vstack(parts) if parts else np.zeros((0, n_classes))
         m = metrics(y_hold, proba, n_classes)
-        return Candidate(spec.name, spec.display, m, time.monotonic() - t0, plots=plots(y_hold, proba, n_classes))
+        return Candidate(spec.name, spec.display, m, time.monotonic() - t0, plots=plots(y_hold, proba, n_classes),
+                         output=proba)
     except Exception as exc:  # one model failing must not sink the championship
         empty = (dict.fromkeys(("rmse", "mae", "r2")) if regression
                  else {"roc_auc": None, "accuracy": None, "log_loss": None})
         return Candidate(spec.name, spec.display, empty, time.monotonic() - t0, error=f"{type(exc).__name__}: {exc}")
+
+
+def ensemble_candidate(members: list[Candidate], y_hold: np.ndarray, n_classes: int, task: str | None) -> Candidate:
+    """Every model that finished, averaged with equal weights and scored on the same holdout.
+
+    Nothing is fitted on the holdout (no weights to tune), so its score is as honest as each member's."""
+    from ..models.ensemble import ensemble_name
+
+    name = ensemble_name([c.model for c in members])
+    display = "Ensemble (" + " + ".join(c.display for c in members) + ")"
+    out = np.mean([c.output for c in members], axis=0)
+    seconds = sum(c.seconds for c in members)
+    if task == REGRESSION:
+        return Candidate(name, display, regression_metrics(y_hold, out), seconds,
+                         plots=regression_plots(y_hold, out), output=out)
+    return Candidate(name, display, metrics(y_hold, out, n_classes), seconds, plots=plots(y_hold, out, n_classes),
+                     output=out)
 
 
 @dataclass
@@ -441,6 +462,7 @@ def run_championship(
     metric: str | None = None,
     estimate: Estimate | None = None,
     observe: Observe | None = None,
+    ensemble: bool = True,
 ) -> ChampionshipResult:
     if not models:
         raise Invalid("No models to run. Install some with pip install zerograd or pass models=[...].", code="no_models")
@@ -464,13 +486,17 @@ def run_championship(
                               start=0.15, span=0.75, estimate=estimate, observe=observe, task=task)
 
     ok = [c for c in candidates if c.error is None]
+    if ensemble and len(ok) >= 2:
+        candidates.append(ensemble_candidate(ok, y[hold_idx], n_classes, task))
+        ok = [c for c in candidates if c.error is None]
     if not ok:
         raise Invalid(
             "Every model failed on this data: " + "; ".join(f"{c.display}: {c.error}" for c in candidates),
             code="all_models_failed",
         )
     champion = max(candidates, key=rank_key(metric))
-    progress("select", 0.92, f"Compared {len(ok)} model{'s' if len(ok) > 1 else ''} on the same {len(hold_idx):,} holdout rows")
+    n_ok = sum(1 for c in ok if not c.model.startswith("ensemble:"))
+    progress("select", 0.92, f"Compared {n_ok} model{'s' if n_ok > 1 else ''} on the same {len(hold_idx):,} holdout rows")
 
     final_idx = stratified_sample(s, max_context_rows, seed=1)
     return ChampionshipResult(

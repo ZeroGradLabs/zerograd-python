@@ -137,3 +137,43 @@ def test_dates_and_numbers_read_as_text_are_kept():
     assert X[1, 0] - X[0, 0] == 1.0 and np.isnan(X[3, 0])
     again = Preprocessor.from_dict(pre.to_dict()).transform(pd.DataFrame([{"signup": "2024-01-02", "amount": "5"}]))
     assert again[0, 0] == X[1, 0] and again[0, 1] == 5.0
+
+
+def test_add_examples_grows_the_context_without_a_championship(zg, tmp_path):
+    df = titanic_like(400)
+    cap = zg.create("t", examples=df.iloc[:200], target="Survived")
+    before, ev = len(cap.context_y), cap.evaluation.copy()
+    new = df.iloc[200:300]
+    assert cap.add_examples(new) is cap
+    assert len(cap.context_y) == before + 100 and cap.rows["added"] == 100
+    assert cap.rows["production_context"] == len(cap.context_y)
+    np.testing.assert_array_equal(cap.context_y[-100:], cap.pre.encode_target(new["Survived"]))
+    pd.testing.assert_frame_equal(cap.evaluation, ev)              # same champion, same leaderboard
+    assert len(cap.predict(df.iloc[300:].drop(columns="Survived"))) == 100
+
+    cap.add_examples(df.iloc[300:], max_context_rows=150)           # newest rows stay, older ones are sampled
+    assert len(cap.context_y) == 150
+    np.testing.assert_array_equal(cap.context_y[-100:], cap.pre.encode_target(df.iloc[300:]["Survived"]))
+    again = zerograd.load(cap.save(tmp_path / "t.zg"), progress=False)
+    assert len(again.context_y) == 150 and again.rows["added"] == 200
+
+
+def test_add_examples_rejects_what_it_cannot_use(zg):
+    df = titanic_like(200)
+    cap = zg.create("t", examples=df, target="Survived")
+    with pytest.raises(ValidationError, match="never seen"):
+        cap.add_examples(df.assign(Survived=2).head(5))
+    with pytest.raises(ValidationError, match="target column"):
+        cap.add_examples(df.drop(columns="Survived").head(5))
+    n = len(cap.context_y)
+    cap.add_examples(df.assign(Survived=None).head(5))               # no labels: nothing to add
+    assert len(cap.context_y) == n
+
+
+def test_add_examples_on_regression(zg):
+    from conftest import houses_like
+
+    df = houses_like(300)
+    cap = zg.create("h", examples=df.iloc[:200], target="price")
+    cap.add_examples(df.iloc[200:])
+    assert cap.context_y.dtype.kind == "f" and len(cap.predict(df.drop(columns="price").head(3))) == 3

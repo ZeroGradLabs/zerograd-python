@@ -168,6 +168,10 @@ def unregister_model(name: str) -> None:
 
 
 def get_model(name: str) -> ModelSpec:
+    if name.startswith("ensemble:"):  # built from its members, never registered
+        from .ensemble import ensemble_spec
+
+        return ensemble_spec(name, get_model)
     try:
         return _REGISTRY[name]
     except KeyError:
@@ -201,17 +205,21 @@ def resolve_models(models: list[str] | None, noncommercial: list[str] | tuple[st
     else:
         chosen = [get_model(n) for n in models]
         for spec in chosen:
-            if not spec.commercial and spec.name not in allowed_nc:
+            parts = [get_model(m) for m in spec.extra.get("members", [])] or [spec]  # an ensemble: each member
+            blocked = [m for m in parts if not m.commercial and m.name not in allowed_nc]
+            if blocked:
+                bad = blocked[0]
                 raise PermissionError(
-                    f"'{spec.name}' is a non-commercial model and is off by default. To use it for research or "
-                    f"evaluation, enable it explicitly with noncommercial=['{spec.name}'] after reviewing its "
-                    f"license: {spec.license_url}"
+                    f"'{bad.name}' is a non-commercial model and is off by default. To use it for research or "
+                    f"evaluation, enable it explicitly with noncommercial=['{bad.name}'] after reviewing its "
+                    f"license: {bad.license_url}"
                 )
         chosen += [get_model(n) for n in allowed_nc if n not in {s.name for s in chosen}]
 
     for spec in chosen:
-        if not spec.commercial:
-            warn_noncommercial(spec)
+        for m in [get_model(n) for n in spec.extra.get("members", [])] or [spec]:
+            if not m.commercial:
+                warn_noncommercial(m)
     return chosen
 
 
