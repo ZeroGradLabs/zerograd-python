@@ -69,7 +69,7 @@ class LocalZeroGrad:
         return df
 
     def create(self, name: str, examples: Any, target: str, *, drop: Iterable[str] | None = None,
-               metric: str | None = None, task: str | None = None) -> "LocalCapability":
+               metric: str | None = None, task: str | None = None, ensemble: bool = True) -> "LocalCapability":
         """Run the championship on labeled history and return the capability with its champion.
 
         `examples` is a DataFrame or a CSV/Parquet path. `task` is "classification" or "regression"; left out,
@@ -77,6 +77,9 @@ class LocalZeroGrad:
         `metric` picks the champion. Classification: roc_auc (default), pr_auc, log_loss, accuracy,
         balanced_accuracy, f1, precision or recall (binary), f1_macro (multiclass). Regression: rmse (default),
         mae or r2.
+
+        With two or more models that finish, their equal-weight average (the ensemble) competes too, and can be
+        the champion. It predicts with every member, so it costs their sum; `ensemble=False` leaves it out.
         """
         from .._remote import to_frame
 
@@ -103,10 +106,11 @@ class LocalZeroGrad:
             result = champ.run_championship(
                 pre, kept, specs, max_context_rows=lim["max_context_rows"],
                 holdout_fraction=lim["holdout_fraction"], chunk=lim["predict_chunk_rows"], progress=live.progress,
-                max_holdout_rows=lim["max_holdout_rows"], metric=metric,
+                max_holdout_rows=lim["max_holdout_rows"], metric=metric, ensemble=ensemble,
             )
         finally:
             live.close()
+        result.rows["context_limit"] = int(lim["max_context_rows"])
         cap = LocalCapability(name=name, pre=pre, result=result, metric=metric, seconds=time.monotonic() - t0,
                               noncommercial=[s.name for s in specs if not s.commercial],
                               chunk=lim["predict_chunk_rows"], progress=self.progress)
@@ -418,6 +422,52 @@ class LocalCapability:
             if threshold is _UNSET:
                 return self
         return self._set_threshold(None if threshold is _UNSET else threshold)
+
+    def add_examples(self, examples: Any, *, max_context_rows: int | None = None) -> "LocalCapability":
+        """Add labeled rows to the context, with no training and no new championship.
+
+        The next prediction already reads them. New rows always stay; when the context would pass
+        `max_context_rows` (default: its size limit when the capability was created, 10,000), the older rows are
+        sampled down, stratified, to make room. The champion and `evaluation` don't change: to re-elect the champion
+        on fresh history, run `zg.create` again. Rows without the target are skipped.
+        """
+        from .._remote import to_frame
+
+        df = to_frame(examples)
+        target = self.pre.target
+        if target not in df.columns:
+            raise ValidationError(f"The new examples need the target column '{target}'.", code="missing_target")
+        df = df[df[target].notna()]
+        if df.empty:
+            return self
+        if not self.pre.regression:
+            known = {str(c) for c in self.classes}
+            unseen = sorted({str(v) for v in df[target].unique()} - known)
+            if unseen:
+                raise ValidationError(
+                    f"'{target}' has values this capability has never seen: {', '.join(unseen[:5])}. It predicts "
+                    f"{', '.join(map(str, self.classes))}; to add a class, create the capability again.",
+                    code="unseen_classes")
+        try:
+            X_new, y_new = self.pre.transform(df), self.pre.encode_target(df[target])
+        except (KeyError, ValueError) as exc:
+            raise ValidationError(f"Could not read the new examples' '{target}' values ({exc}).",
+                                  code="invalid_target") from None
+        limit = int(max_context_rows or self.rows.get("context_limit") or max(10_000, len(self.context_y)))
+        if len(y_new) >= limit:  # only the newest rows fit
+            X_new, y_new = X_new[-limit:], y_new[-limit:]
+            keep = np.zeros(0, dtype=np.int64)
+        else:
+            room = limit - len(y_new)
+            keep = (np.arange(len(self.context_y)) if len(self.context_y) <= room
+                    else champ.stratified_sample(champ.strata(self.context_y, self.task), room, seed=0))
+        self.context_X = np.concatenate([self.context_X[keep], X_new.astype(self.context_X.dtype)])
+        self.context_y = np.concatenate([self.context_y[keep], y_new.astype(self.context_y.dtype)])
+        self.rows = {**self.rows, "labeled": int(self.rows.get("labeled", 0)) + int(len(df)),
+                     "production_context": int(len(self.context_y)),
+                     "added": int(self.rows.get("added", 0)) + int(len(df))}
+        self._fitted = None
+        return self
 
     def _set_threshold(self, threshold: float | None) -> "LocalCapability":
         if threshold is not None:
@@ -752,8 +802,12 @@ def _models_line(specs: list[ModelSpec]) -> str:
 
 def _prefetch(specs: list[ModelSpec], ui: Console, task: str = "classification") -> None:
     """Download missing weights up front, with a clear line, so they never fight with a spinner."""
+    from ..models import get_model
     from ..weights import hub_file, missing_files
 
+    # an ensemble downloads each member's weights
+    specs = [get_model(m) for s in specs for m in s.extra.get("members", [])] + [s for s in specs
+                                                                                if not s.extra.get("members")]
     for spec in specs:
         todo = missing_files(spec, task)
         if not todo:

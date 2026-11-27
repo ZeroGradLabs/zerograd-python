@@ -51,7 +51,8 @@ Forecasting, causal modeling, marketing mix modeling and recommendations are com
 On top of that:
 
 * **A championship instead of a guess.** Which model is best depends on the data. ZeroGrad scores every model on the
-  same holdout of your rows and keeps the best one as the champion, with the comparison in a table.
+  same holdout of your rows, adds their average as one more candidate (the ensemble), and keeps the best one as the
+  champion, with the comparison in a table.
 * **Licenses you can see.** Some models allow commercial use and some do not. `zerograd.list_models()` shows each
   license and where the weights come from; non-commercial models stay off unless you enable them by name.
 * **Local or cloud, same code.** Locally, nothing leaves your machine. With `remote=True` the same capability runs on
@@ -182,6 +183,7 @@ Everything below is explained, with code, in the [docs](https://zerograd.dev/doc
 * **[scikit-learn](https://zerograd.dev/docs#sklearn):** `ZeroGradClassifier` and `ZeroGradRegressor` work in pipelines, grid search and `cross_val_score`.
 * **[No target](https://zerograd.dev/docs#no-target):** [anomaly detection](https://zerograd.dev/docs#anomaly-detection) with the columns why, [imputation](https://zerograd.dev/docs#imputation), [synthetic data](https://zerograd.dev/docs#synthetic-data) and [clustering](https://zerograd.dev/docs#clustering).
 * **[Privacy](https://zerograd.dev/docs#privacy):** find and drop sensitive columns, or pseudonymize them with a local vault, before anything leaves your machine.
+* **New rows, no retraining:** `cap.add_examples(new_rows)` adds labeled rows to the context, and the next prediction already uses them.
 * **Save and open:** `cap.save()` writes one file and `zerograd.load()` opens it again.
 * **Bring your own model:** `zerograd.register_estimator("hgb", HistGradientBoostingClassifier())` puts any estimator with `fit` and `predict_proba` (or `predict`, for regression) in the championship: scikit-learn, XGBoost, LightGBM, CatBoost or your own class. For a full adapter with license and weights, use `zerograd.register_model`.
 * **[The ZeroGrad platform](https://zerograd.dev/docs#platform):** with `remote=True` the same code runs on the platform (private preview), with versions, scheduled championships, monitoring and batch pipelines.
