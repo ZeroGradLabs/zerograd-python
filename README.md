@@ -89,7 +89,7 @@ Open source under Apache 2.0. Try it without installing anything, in Colab:
 
 ```bash
 pip install zerograd                  # local engine with TabPFN v2 and TabICLv2
-pip install "zerograd[all]"           # adds Mitra-v2 and TabDPT
+pip install "zerograd[all]"           # adds Mitra-v2, TabDPT and Kumo-Tabular
 ```
 
 Or install one model's own package from Python, from a fixed recipe, into the Python you're running (a notebook
@@ -137,6 +137,8 @@ In a notebook these render as tables with a badge for commercial and non-commerc
 | TabICLv2 | `tabicl-v2` | BSD-3-Clause | yes | yes |
 | Mitra-v2 | `mitra-v2` | Apache 2.0 | yes | yes, with `pip install "zerograd[mitra]"` |
 | TabDPT | `tabdpt` | Apache 2.0 | yes | yes, with `pip install "zerograd[tabdpt]"` |
+| Kumo-Tabular (NVIDIA) | `kumo-tabular` | OpenMDW-1.1 (code Apache 2.0) | yes | yes, with `pip install "zerograd[kumo]"` (Python 3.11+) |
+| Kumo-Tabular Medium, Small | `kumo-tabular-medium`, `kumo-tabular-small` | OpenMDW-1.1 (code Apache 2.0) | yes | by name |
 | Mitra | `mitra` | Apache 2.0 | yes | by name |
 | FoMo-0D | `fomo-0d` | MIT | yes | anomaly detection |
 | ZEUS | `zeus` | Apache 2.0 | yes | clustering |
@@ -144,7 +146,7 @@ In a notebook these render as tables with a badge for commercial and non-commerc
 
 The full list, with sources and the models that are off by default, is in [MODELS.md](MODELS.md).
 This version runs **classification** (binary and multiclass, up to 10 classes) and **regression** (locally, with
-TabPFN v2, TabICLv2 and TabDPT), plus four tasks with no target: anomaly detection, imputation, synthetic data and
+TabPFN v2, TabICLv2, TabDPT and Kumo-Tabular), plus four tasks with no target: anomaly detection, imputation, synthetic data and
 clustering. `zerograd.list_tasks()` shows which models run each task.
 
 ## Benchmark
