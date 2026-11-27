@@ -81,6 +81,8 @@ class ModelSpec:
     # Anomaly detection with a dedicated model: (X context, X query) -> one score per query row, higher = more unusual.
     # Classifiers need none: they detect anomalies, impute and synthesize through zerograd.unsupervised's chain rule.
     anomaly_fn: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None
+    # Imputation with a dedicated model: X with NaN for the gaps -> the same matrix with every gap filled.
+    impute_fn: Callable[[np.ndarray], np.ndarray] | None = None
     # Clustering: X -> one embedding row per input row, clustered with k-means.
     embed_fn: Callable[[np.ndarray], np.ndarray] | None = None
 
@@ -89,7 +91,7 @@ class ModelSpec:
         """The tasks this version of the SDK runs with this model (a subset of `tasks`)."""
         ok = {"classification": self.fit_fn is not None, "regression": self.regress_fn is not None,
               "anomaly_detection": self.anomaly_fn is not None or self.fit_fn is not None,
-              "imputation": self.fit_fn is not None, "synthetic_data": self.fit_fn is not None,
+              "imputation": self.impute_fn is not None or self.fit_fn is not None, "synthetic_data": self.fit_fn is not None,
               "clustering": self.embed_fn is not None}
         return tuple(t for t in TASKS if t in self.tasks and ok.get(t))
 

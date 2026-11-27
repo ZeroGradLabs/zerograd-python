@@ -142,6 +142,7 @@ In a notebook these render as tables with a badge for commercial and non-commerc
 | Mitra | `mitra` | Apache 2.0 | yes | by name |
 | FoMo-0D | `fomo-0d` | MIT | yes | anomaly detection |
 | ZEUS | `zeus` | Apache 2.0 | yes | clustering |
+| MatrixFormer | `matrixformer` | Apache 2.0 | yes | imputation, with `zerograd.install_model("matrixformer")` |
 
 The full list, with sources and the models that are off by default, is in [MODELS.md](MODELS.md).
 This version runs **classification** (binary and multiclass, up to 10 classes) and **regression** (locally, with

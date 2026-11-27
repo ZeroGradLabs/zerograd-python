@@ -16,6 +16,7 @@ ZeroGrad hosts no weights: each model downloads them from its author's repositor
 | Kumo-Tabular Small | `kumo-tabular-small` | classification, regression | [OpenMDW-1.1 (code Apache 2.0)](https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE) | huggingface.co/nvidia/Kumo-Tabular | `pip install "zerograd[kumo]"` | no |
 | Mitra | `mitra` | classification, (regression) | [Apache 2.0](https://huggingface.co/autogluon/mitra-classifier) | huggingface.co/autogluon/mitra-classifier | `pip install "zerograd[mitra]"` | no |
 | FoMo-0D | `fomo-0d` | anomaly detection | [MIT](https://github.com/A-Chicharito-S/FoMo-0D/blob/main/LICENSE) | huggingface.co/YuchenShen/FoMo-0D | `pip install zerograd` | no |
+| MatrixFormer | `matrixformer` | imputation | [Apache 2.0](https://huggingface.co/Tabimpute/MatrixFormer) | huggingface.co/Tabimpute/MatrixFormer | `pip install "matrixformer @ git+https://github.com/jacobf18/MatrixFormer.git"` or `zerograd.install_model("matrixformer")` | no |
 | ZEUS | `zeus` | clustering | [Apache 2.0](https://github.com/gmum/zeus/blob/main/legal/LICENSE.txt) | the authors' checkpoint, linked from github.com/gmum/zeus | `pip install zerograd` | no |
 
 `mitra` (v1) runs only when named; Mitra-v2 replaces it in the default championship.
@@ -27,7 +28,9 @@ regressor needs a fine-tune on a GPU, so it is left for a later version.
 TabPFN v2 asks you to show **Built with PriorLabs-TabPFN** in products built with it (see NOTICE).
 TabPFN v2 and TabICLv2 run anomaly detection, imputation and synthetic data through the chain rule in
 `zerograd.unsupervised` (any classifier in the registry can). FoMo-0D and ZEUS are zero-shot models for one task
-each; their inference code is vendored in `zerograd/models/_vendor` with the authors' licenses.
+each; their inference code is vendored in `zerograd/models/_vendor` with the authors' licenses. MatrixFormer
+(imputation) runs through its authors' own package, which installs from GitHub, so it isn't in an extra. Numbers go in
+as they are and categories as codes, and a filled category is the nearest code that exists in the column.
 
 ## Non-commercial (off by default, research and evaluation only)
 
@@ -52,6 +55,6 @@ The TabFM, EXAONE Tabular and LimiX-2 adapters follow each project's published u
 | Classification | yes | Predict a category: binary (churn, fraud, default) or multiclass (up to 10 classes). |
 | Regression | yes, locally | Predict a number (amount, price, demand, time) with TabPFN v2, TabICLv2, TabDPT and Kumo-Tabular (and TabPFN 2.5+, non-commercial). Not with `remote=True` yet. |
 | Anomaly detection | yes, locally | `zg.anomalies(df)`: every row scored, the unusual ones flagged, with the columns why. TabPFN v2, TabICLv2, FoMo-0D; Isolation Forest, LOF and kNN to compare. |
-| Imputation | yes, locally | `zg.impute(df)`: a championship on hidden cells (TabPFN v2, TabICLv2 against mean/mode, KNN and iterative imputation), then the champion fills the gaps. |
+| Imputation | yes, locally | `zg.impute(df)`: a championship on hidden cells (TabPFN v2, TabICLv2 and MatrixFormer when installed, against mean/mode, KNN and iterative imputation), then the champion fills the gaps. |
 | Synthetic data | yes, locally | `zg.synthesize(df, n)`: new rows scored by how hard they are to tell apart from yours (detection AUC) and exact copies. TabPFN v2, TabICLv2. |
 | Clustering | yes, locally | `zg.cluster(df)`: segments with what sets each apart. ZEUS embeddings with k-means, against k-means and a Gaussian mixture. |
