@@ -35,7 +35,8 @@ Things that are easy to get wrong:
 - The task comes from the target column. Categories, booleans and whole numbers with up to 10 distinct values are a
   classification; other numbers are a regression. Pass `task="classification"` or `task="regression"` to force it.
 - Drop columns that are only known after the outcome (a cancellation reason, a chargeback date) with `drop=[...]`.
-  They make the holdout look great and production fail. Identifiers, free text and constant columns are dropped
+  They make the holdout look great and production fail. `cap.warnings` flags columns that alone predict the
+  target almost perfectly, and holdout rows duplicated in the context; read it before you trust a score. Identifiers, free text and constant columns are dropped
   for you, and `cap.columns` lists what was used and what was dropped, with the reason.
 - Classification predictions have `prediction`, `score` (binary only) and `proba_<class>`. Regression only has
   `prediction`, and passing a threshold to it is an error.

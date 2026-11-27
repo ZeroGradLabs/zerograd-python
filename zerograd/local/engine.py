@@ -118,6 +118,8 @@ class LocalZeroGrad:
         base_name, base_label = ("baseline:mean", "always the average") if pre.regression else (
             "baseline:majority", "majority class")
         base = next((b for b in result.baselines or [] if b.model == base_name), None)
+        for w in cap.warnings:
+            ui.say(ui.warn(f"! {w['message']}"))
         label, higher, _ = champ.METRICS[metric]
         ui.podium([(c.display, c.metrics.get(metric), c.error) for c in ranked], label,
                   cap.attribution, baseline=base.metrics.get(metric) if base else None,
@@ -298,6 +300,7 @@ class LocalCapability:
         self._chunk = chunk
         self._progress = progress
         self._fitted: FittedModel | None = None
+        self.warnings: list[dict] = []  # what the checks before the championship found (leakage, duplicates)
         if _state is not None:  # loaded from disk
             self.__dict__.update(_state)
             return
@@ -305,6 +308,7 @@ class LocalCapability:
         self.champion = result.champion
         self.candidates = [c.to_dict() for c in result.candidates]
         self.baseline_rows = [c.to_dict() for c in result.baselines or []]
+        self.warnings = list(result.warnings or [])
         self.rows = result.rows
         self.context_X = result.context_X
         self.context_y = result.context_y
@@ -670,6 +674,7 @@ class LocalCapability:
             "preprocessor": self.pre.to_dict(), "metric": self.metric, "threshold": self.threshold,
             "champion": self.champion, "candidates": self.candidates, "baselines": self.baseline_rows,
             "rows": self.rows, "seconds": self.seconds, "noncommercial": self.noncommercial,
+            "warnings": self.warnings,
         }
         buf = io.BytesIO()
         np.savez_compressed(buf, X=self.context_X, y=self.context_y)
@@ -696,6 +701,7 @@ def load(path: str | Path, *, noncommercial: Iterable[str] = (), progress: bool 
         "rows": meta["rows"], "context_X": X, "context_y": y, "seconds": meta.get("seconds", 0.0),
         "noncommercial": meta.get("noncommercial", []), "created_at": meta.get("created_at"),
         "threshold": meta.get("threshold"), "metric": meta.get("metric", champ.DEFAULT_METRIC),
+        "warnings": meta.get("warnings", []),
     }
     return LocalCapability(name=meta["name"], pre=Preprocessor.from_dict(meta["preprocessor"]),
                            progress=progress, _state=state)

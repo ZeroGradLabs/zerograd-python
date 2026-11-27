@@ -374,6 +374,7 @@ class ChampionshipResult:
     context_X: np.ndarray
     context_y: np.ndarray
     baselines: list[Candidate] | None = None
+    warnings: list[dict] | None = None
 
 
 def baselines(y_ctx: np.ndarray, y_hold: np.ndarray, n_classes: int, task: str | None = None) -> list[Candidate]:
@@ -474,6 +475,11 @@ def run_championship(
 
     train_idx, hold_idx = holdout_split(s, holdout_fraction, max_rows=max_holdout_rows)
     ctx_idx = train_idx[stratified_sample(s[train_idx], max_context_rows)]
+    from .checks import duplicate_share, duplicate_warning, leaky_columns
+
+    warnings = leaky_columns(X[train_idx], y[train_idx], pre.feature_names, task)
+    dup = duplicate_warning(duplicate_share(X[ctx_idx], X[hold_idx]))
+    warnings += [dup] if dup else []
     progress("split", 0.15, f"Context {len(ctx_idx):,} rows · holdout {len(hold_idx):,} rows (all scored)")
 
     candidates = evaluate_all(models, X[ctx_idx], y[ctx_idx], X[hold_idx], y[hold_idx], n_classes, chunk, progress,
@@ -505,4 +511,5 @@ def run_championship(
         },
         context_X=X[final_idx],
         context_y=y[final_idx],
+        warnings=warnings,
     )
