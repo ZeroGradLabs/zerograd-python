@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+* **Kumo-Tabular (NVIDIA).** `kumo-tabular` joins the default championship for classification and regression when
+  installed with `pip install "zerograd[kumo]"` (Python 3.11+); `kumo-tabular-medium` and `kumo-tabular-small` are
+  lighter checkpoints you run by name. Weights under OpenMDW-1.1, code Apache 2.0.
+* **Your own estimators in the championship.** `zerograd.register_estimator(name, estimator, regressor=None)` takes
+  anything with `fit(X, y)` and `predict_proba(X)` (classification) or `predict(X)` (regression), from
+  scikit-learn, XGBoost, LightGBM, CatBoost or your own code, and runs it next to the foundation models on the same
+  holdout. It's copied before every fit, NaN is filled with context medians for scikit-learn estimators that don't
+  accept it, and it works with `cross_validate`, `save`/`load` and `ZeroGradClassifier(model=name)`.
+* **Dates and numbers that arrive as text are kept.** A date column read from a CSV ("2024-01-31") used to be dropped
+  as free text; it is now read as a date. Numbers in text form with many distinct values ("12.50") are now read as
+  numbers instead of being dropped.
+
 ## 0.2.4 (2026-11-15)
 
 * **MCP server for agents.** `pip install "zerograd[mcp]"` adds `zerograd-mcp`, a local stdio server for Claude Code,

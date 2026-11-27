@@ -35,7 +35,7 @@ class Recipe:
 RECIPES: dict[str, Recipe] = {
     "mitra-v2": Recipe(pip=("autogluon.tabular[mitra]>=1.6",)),
     "mitra": Recipe(pip=("autogluon.tabular[mitra]>=1.6",)),
-    "tabdpt": Recipe(pip=("tabdpt>=1.1",)),
+    "tabdpt": Recipe(pip=("tabdpt>=1.3",)),
     **{name: Recipe(pip=("structured-data-models>=0.3",), python=(3, 11))
        for name in ("kumo-tabular", "kumo-tabular-medium", "kumo-tabular-small")},
     "tabfm": Recipe(pip=("tabfm[pytorch]",)),

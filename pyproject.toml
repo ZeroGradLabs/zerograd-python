@@ -37,7 +37,7 @@ dependencies = [
 # The base install already runs locally with TabPFN v2 and TabICLv2. "local" is kept so `zerograd[local]` works.
 local = []
 mitra = ["autogluon.tabular[mitra]>=1.6"]
-tabdpt = ["tabdpt>=1.1"]
+tabdpt = ["tabdpt>=1.3"]
 # NVIDIA Kumo-Tabular. Its package needs Python 3.11 or newer.
 kumo = ["structured-data-models>=0.3; python_version >= '3.11'"]
 # The MCP server for agents (Claude Code, Cursor, Codex...): `zerograd-mcp`.

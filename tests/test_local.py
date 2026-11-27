@@ -115,3 +115,25 @@ def test_a_failing_model_does_not_sink_the_championship(toy_models, monkeypatch)
         assert "no weights" in cap.evaluation.loc["Boom", "error"]
     finally:
         unregister_model("test-boom")
+
+
+def test_dates_and_numbers_read_as_text_are_kept():
+    from zerograd.local.preprocess import Preprocessor
+
+    n = 120
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({
+        "signup": pd.date_range("2024-01-01", periods=n).astype(str),   # what read_csv gives for a date column
+        "amount": [f"{v:.2f}" for v in rng.random(n) * 100],            # numbers that arrived as text
+        "note": [f"called on day {i}, left a message" for i in range(n)],
+        "y": rng.integers(0, 2, n),
+    })
+    df.loc[3, "signup"] = None
+    pre, _ = Preprocessor.fit(df, "y")
+    kinds = {c.name: c.kind for c in pre.columns}
+    assert kinds == {"signup": "datetime", "amount": "numeric"}
+    assert [d["name"] for d in pre.dropped] == ["note"]
+    X = pre.transform(df)
+    assert X[1, 0] - X[0, 0] == 1.0 and np.isnan(X[3, 0])
+    again = Preprocessor.from_dict(pre.to_dict()).transform(pd.DataFrame([{"signup": "2024-01-02", "amount": "5"}]))
+    assert again[0, 0] == X[1, 0] and again[0, 1] == 5.0
