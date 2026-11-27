@@ -4,8 +4,9 @@
 |----------|-------------------|------------|----------------------------------------------------|
 | FoMo-0D  | anomaly detection | MIT        | huggingface.co/YuchenShen/FoMo-0D                  |
 | ZEUS     | clustering        | Apache 2.0 | the authors' checkpoint (github.com/gmum/zeus)     |
+| MatrixFormer | imputation    | Apache 2.0 | huggingface.co/Tabimpute/MatrixFormer              |
 
-Their model code is vendored in `zerograd/models/_vendor` with each license; the weights download from the
+FoMo-0D and ZEUS have their model code vendored in `zerograd/models/_vendor` with each license; the weights download from the
 authors on first use. TabPFN v2 and TabICLv2 also run these tasks, through the chain rule in zerograd.unsupervised.
 """
 
@@ -248,4 +249,45 @@ ZEUS = register_model(ModelSpec(
     embed_fn=_zeus_embed,
     check_fn=missing("torch"),
     extra={"max_rows": ZEUS_ROWS, "fetch": zeus_path},  # fetch: weights outside Hugging Face, for zerograd.download
+))
+
+
+# ---------------------------------------------------------------- MatrixFormer
+# Matrix completion (Saha, Feitelberg, Choi, Dwivedi, Agarwal; arXiv 2610.06751). Its own runtime (`matrixformer`,
+# installed from the authors' GitHub) downloads the checkpoint from Tabimpute/MatrixFormer at a pinned release and
+# checks its SHA-256. Numbers only: categories go in as codes and come back as the nearest code in the column.
+MATRIXFORMER_REPO = "Tabimpute/MatrixFormer"
+MATRIXFORMER_GIT = "git+https://github.com/jacobf18/MatrixFormer.git"
+_matrixformer_cache: dict = {}
+
+
+def _matrixformer_impute(X: np.ndarray) -> np.ndarray:
+    dev = device()
+    model = _matrixformer_cache.get(dev)
+    if model is None:
+        from matrixformer import MatrixFormer
+
+        # bfloat16 needs a recent NVIDIA GPU; float32 works everywhere it runs (CPU and CUDA, not MPS).
+        model = MatrixFormer.from_pretrained(device=dev, precision="float32")
+        _matrixformer_cache.clear()
+        _matrixformer_cache[dev] = model
+    return np.asarray(model.impute(np.asarray(X, dtype=np.float64)), dtype=np.float64)
+
+
+MATRIXFORMER = register_model(ModelSpec(
+    name="matrixformer",
+    display="MatrixFormer",
+    family="TabImpute",
+    license="Apache 2.0",
+    license_url="https://huggingface.co/Tabimpute/MatrixFormer",
+    source=f"huggingface.co/{MATRIXFORMER_REPO}",
+    commercial=True,
+    install=f'pip install "matrixformer @ {MATRIXFORMER_GIT}"',
+    default=False,  # not a classifier: never part of a supervised championship
+    notes=("Zero-shot matrix completion (TabImpute authors, 2026). Up to 2,000 rows by 1,000 columns per window; "
+           "larger tables are filled in overlapping windows."),
+    tasks=("imputation",),
+    fit_fn=None,  # type: ignore[arg-type]
+    impute_fn=_matrixformer_impute,
+    check_fn=missing("matrixformer"),
 ))

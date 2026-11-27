@@ -13,7 +13,7 @@ def test_lists_every_model_with_filters():
     assert all(r["commercial"] for r in com) and not any(r["commercial"] for r in nc)
     assert len(com) + len(nc) == len(allm)
     assert names.index("tabpfn-v2") < names.index("tabpfn-2.5")  # commercial first
-    assert set(zerograd.list_models(task="imputation").names()) == {"tabpfn-v2", "tabicl-v2", "limix-2"}
+    assert set(zerograd.list_models(task="imputation").names()) == {"tabpfn-v2", "tabicl-v2", "matrixformer", "limix-2"}
     assert zerograd.list_models(task="clustering").names() == ["zeus"]
     assert set(zerograd.list_models(remote=True).names()) == {"tabpfn-v2", "tabicl-v2"}
     with pytest.raises(ValueError, match="Unknown task"):

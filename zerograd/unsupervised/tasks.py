@@ -307,6 +307,26 @@ def _impute_baseline(name: str, X: np.ndarray, kinds: list[str], targets: np.nda
     return out
 
 
+def _impute_model(spec: ModelSpec, X: np.ndarray, kinds: list[str], targets: np.ndarray, max_context: int,
+                  seed: int) -> np.ndarray:
+    """Fill the `targets` cells of X with a foundation model: a dedicated imputer, or a classifier's chain rule."""
+    if spec.impute_fn is None:
+        return chain.fill(spec, X, kinds, targets, max_context=max_context, seed=seed)
+    Xm = X.astype(np.float64).copy()
+    Xm[targets] = np.nan
+    keep = [j for j in range(X.shape[1]) if not np.isnan(Xm[:, j]).all()]
+    out = Xm.copy()
+    out[:, keep] = np.asarray(spec.impute_fn(Xm[:, keep]), dtype=np.float64)
+    out[~np.isnan(Xm)] = Xm[~np.isnan(Xm)]  # observed cells stay as they are
+    for j, kind in enumerate(kinds):
+        if kind in ("categorical", "boolean"):  # codes: the nearest one that exists in the column
+            codes = np.unique(Xm[~np.isnan(Xm[:, j]), j])
+            if len(codes):
+                col = out[:, j]
+                out[:, j] = codes[np.abs(col[:, None] - codes[None, :]).argmin(axis=1)]
+    return out
+
+
 def _impute_error(X: np.ndarray, filled: np.ndarray, kinds: list[str], hidden: np.ndarray) -> dict[str, float]:
     """Numbers: RMSE over the column's spread (0 = perfect, 1 = as good as guessing the mean). Categories: error rate."""
     per = {}
@@ -359,7 +379,7 @@ def impute(data: Any, *, models: Iterable[str] | None = None, noncommercial: Ite
         label = spec.display if spec else name
         try:
             with ui.spinner(f"{label} · filling {int(hidden.sum()):,} hidden cells", done=f"{label} done"):
-                filled = (chain.fill(spec, Xh, table.kinds, hidden, max_context=max_context_rows, seed=seed) if spec
+                filled = (_impute_model(spec, Xh, table.kinds, hidden, max_context_rows, seed) if spec
                           else _impute_baseline(name, X, table.kinds, hidden, seed))
             per = _impute_error(X, filled, table.kinds, hidden)
             rows.append({"model": name, "error": float(np.mean(list(per.values()))),
@@ -377,7 +397,7 @@ def impute(data: Any, *, models: Iterable[str] | None = None, noncommercial: Ite
 
     spec = get_model(champion) if champion not in BASELINES["imputation"] else None
     with ui.spinner(f"{champion} · filling {int(gaps.sum()):,} missing cells", done="Gaps filled"):
-        filled = (chain.fill(spec, X, table.kinds, gaps, max_context=max_context_rows, seed=seed) if spec
+        filled = (_impute_model(spec, X, table.kinds, gaps, max_context_rows, seed) if spec
                   else _impute_baseline(champion, X, table.kinds, gaps, seed))
     out = df.copy()
     mask = pd.DataFrame(False, index=df.index, columns=df.columns)

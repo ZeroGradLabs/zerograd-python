@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+* **Kumo-Tabular (NVIDIA).** `kumo-tabular` joins the default championship for classification and regression when
+  installed with `pip install "zerograd[kumo]"` (Python 3.11+); `kumo-tabular-medium` and `kumo-tabular-small` are
+  lighter checkpoints you run by name. Weights under OpenMDW-1.1, code Apache 2.0.
+* **MatrixFormer for imputation.** `zerograd.install_model("matrixformer")` adds the TabImpute authors' zero-shot
+  matrix-completion model (Apache 2.0) to the `zg.impute` championship. Models can now fill a table themselves
+  (`ModelSpec.impute_fn`) instead of going through the chain rule.
 * **Inpriora (Ant Group).** `zerograd.install_model("inpriora")` adds Inpriora (code and weights Apache 2.0) to the
   default championship for classification and regression.
 * **Your own estimators in the championship.** `zerograd.register_estimator(name, estimator, regressor=None)` takes

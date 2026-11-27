@@ -23,6 +23,9 @@ def test_every_recipe_names_a_model_and_matches_the_extras():
     assert list(inst.RECIPES["mitra-v2"].pip) == extra("mitra")
     assert list(inst.RECIPES["mitra"].pip) == extra("mitra")
     assert list(inst.RECIPES["tabdpt"].pip) == extra("tabdpt")
+    for name in ("kumo-tabular", "kumo-tabular-medium", "kumo-tabular-small"):  # the extra adds a Python marker
+        assert list(inst.RECIPES[name].pip) == [r.split(";")[0].strip() for r in extra("kumo")]
+        assert inst.RECIPES[name].python == (3, 11)
 
 
 def test_noncommercial_needs_the_license_accepted():
@@ -109,8 +112,9 @@ def test_hf_token_notice_is_hidden_during_downloads(monkeypatch, caplog):
 
     monkeypatch.delenv("ZEROGRAD_SHOW_HF_WARNINGS", raising=False)
     log = logging.getLogger("huggingface_hub.utils._http")
+    before = logging.getLogger("huggingface_hub").level  # importing some model packages sets it
     with caplog.at_level(logging.WARNING), quiet_hub():
         log.warning("Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN.")
         log.error("a real error")
     assert "unauthenticated" not in caplog.text and "a real error" in caplog.text
-    assert logging.getLogger("huggingface_hub").level == logging.NOTSET  # restored
+    assert logging.getLogger("huggingface_hub").level == before  # restored
