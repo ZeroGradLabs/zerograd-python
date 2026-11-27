@@ -28,6 +28,8 @@ cap.save("churn.zg"); cap = zerograd.load("churn.zg")
 
 Things that are easy to get wrong:
 
+- When new labeled rows arrive, `cap.add_examples(rows)` puts them in the context with no retraining. It doesn't
+  re-run the championship; call `zg.create` again for that.
 - The task comes from the target column. Categories, booleans and whole numbers with up to 10 distinct values are a
   classification; other numbers are a regression. Pass `task="classification"` or `task="regression"` to force it.
 - Drop columns that are only known after the outcome (a cancellation reason, a chargeback date) with `drop=[...]`.

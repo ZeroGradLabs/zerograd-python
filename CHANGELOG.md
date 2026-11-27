@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+* **New rows without retraining.** `cap.add_examples(rows)` adds labeled rows to the capability's context and the
+  next prediction reads them, with no training and no new championship. New rows always stay; past the context
+  limit (`max_context_rows=`, 10,000 by default) the older rows are sampled down. Classes the capability has never
+  seen are refused, since adding a class needs a new `create`.
+
 ## 0.2.5 (2026-11-27)
 
 * **TabDPT 1.3.** The `tabdpt` extra and `install_model("tabdpt")` now require tabdpt 1.3, which loads the newer
