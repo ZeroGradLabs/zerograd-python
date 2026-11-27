@@ -7,6 +7,7 @@
 | Mitra-v2   | Apache 2.0                                | huggingface.co/autogluon/mitra-classifier-2 |
 | Mitra      | Apache 2.0                                | huggingface.co/autogluon/mitra-classifier |
 | TabDPT     | Apache 2.0                                | huggingface.co/Layer6/TabDPT         |
+| Kumo-Tabular | OpenMDW-1.1 (code Apache 2.0)           | huggingface.co/nvidia/Kumo-Tabular   |
 """
 
 from __future__ import annotations
@@ -181,6 +182,84 @@ def _tabdpt_regress(X: np.ndarray, y: np.ndarray, serving: bool) -> FittedRegres
     return Point(model, predict=lambda Xq: model.predict(Xq, n_ensembles=8, context_size=2048, seed=0))
 
 
+# ---------------------------------------------------------------- Kumo-Tabular (NVIDIA)
+# Inference code: NVIDIA's structured-data-models (`sdm`, Apache 2.0, Python 3.11+). Weights: OpenMDW-1.1, which
+# allows any use and only asks you to keep the license and notices when you redistribute the weights.
+KUMO_REPO = "nvidia/Kumo-Tabular"
+KUMO_ESTIMATORS = 8  # the ensemble size in NVIDIA's examples
+
+
+def _kumo_file(size: str, task: str) -> str:
+    return f"{size}/{'classifier' if task == 'classification' else 'regressor'}.pt"
+
+
+def _kumo_model(size: str, task: str):
+    import torch
+    from sdm.models import KumoTabular
+
+    from ..weights import hub_file
+
+    dev = device()
+    model = KumoTabular(task=task, size=size, pretrained=False, device=dev)
+    path = hub_file(KUMO_REPO, _kumo_file(size, task), model=f"kumo-tabular-{size}")
+    model.models[task].load_state_dict(torch.load(path, map_location=dev, weights_only=True))
+    return model.eval(), torch
+
+
+def _kumo_table(X: np.ndarray):
+    import pandas as pd
+    import sdm
+
+    cols = [f"x{j}" for j in range(X.shape[1])]
+    df = pd.DataFrame(np.asarray(X, dtype=np.float32), columns=cols)
+    return sdm.TableTensor.from_pandas(df, {c: "numerical" for c in cols}, device=device())
+
+
+def _kumo_target(y: np.ndarray, stype: str):
+    import pandas as pd
+    import sdm
+
+    return sdm.TableTensor.from_pandas(pd.DataFrame({"target": y}), {"target": stype}, device=device())
+
+
+def _kumo_fit(size: str):
+    def fit(X: np.ndarray, y: np.ndarray, n_classes: int, serving: bool) -> FittedModel:
+        model, torch = _kumo_model(size, "classification")
+        model.fit(_kumo_table(X), _kumo_target(np.asarray(y, dtype=np.int64), "categorical"),
+                  num_estimators=KUMO_ESTIMATORS, generator=torch.Generator().manual_seed(0))
+
+        def predict(Xq: np.ndarray) -> np.ndarray:
+            with torch.inference_mode():
+                out = model.predict(_kumo_table(Xq))
+            # One column per class in the context, labelled with the class but not in sorted order.
+            order = np.argsort([int(float(c)) for c in out.numerical_columns])
+            return out.numerical.float().cpu().numpy()[:, order]
+
+        return Aligned(model, n_classes, seen=[int(c) for c in np.unique(y)], predict=predict)
+
+    return fit
+
+
+def _kumo_regress(size: str):
+    def regress(X: np.ndarray, y: np.ndarray, serving: bool) -> FittedRegressor:
+        model, torch = _kumo_model(size, "regression")
+        model.fit(_kumo_table(X), _kumo_target(np.asarray(y, dtype=np.float64), "numerical"),
+                  num_estimators=KUMO_ESTIMATORS, generator=torch.Generator().manual_seed(0))
+
+        def predict(Xq: np.ndarray) -> np.ndarray:
+            with torch.inference_mode():
+                out = model.predict(_kumo_table(Xq))
+            return out.numerical.double().cpu().numpy().mean(axis=1)  # the mean of its 999 quantiles
+
+        return Point(model, predict=predict)
+
+    return regress
+
+
+def _kumo_weights(size: str, task: str):
+    return lambda: [(KUMO_REPO, _kumo_file(size, task)), (KUMO_REPO, "LICENSE")]
+
+
 TABPFN_V2 = register_model(ModelSpec(
     name="tabpfn-v2",
     display="TabPFN v2",
@@ -269,3 +348,26 @@ TABDPT = register_model(ModelSpec(
     regression_weights_fn=_tabdpt_weights,  # one checkpoint for both tasks
     check_fn=missing("tabdpt"),
 ))
+
+
+KUMO_NOTES = ("NVIDIA Kumo-Tabular, zero-shot. Needs Python 3.11+. Pretrained on tables up to 60,000 rows and "
+              "100 columns.")
+for _size, _default in (("large", True), ("medium", False), ("small", False)):
+    register_model(ModelSpec(
+        name="kumo-tabular" if _size == "large" else f"kumo-tabular-{_size}",
+        display="Kumo-Tabular" if _size == "large" else f"Kumo-Tabular {_size.capitalize()}",
+        family="Kumo-Tabular",
+        license="OpenMDW-1.1 (code Apache 2.0)",
+        license_url="https://huggingface.co/nvidia/Kumo-Tabular/blob/main/LICENSE",
+        source=f"huggingface.co/{KUMO_REPO}",
+        commercial=True,
+        install='pip install "zerograd[kumo]"',
+        default=_default,  # the large model joins the default championship; medium and small run by name
+        notes=KUMO_NOTES + ("" if _default else " A smaller checkpoint, lighter on CPU; run it by name."),
+        tasks=("classification", "regression"),
+        fit_fn=_kumo_fit(_size),
+        weights_fn=_kumo_weights(_size, "classification"),
+        regress_fn=_kumo_regress(_size),
+        regression_weights_fn=_kumo_weights(_size, "regression"),
+        check_fn=missing("sdm"),
+    ))

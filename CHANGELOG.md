@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+* **Kumo-Tabular (NVIDIA).** `kumo-tabular` joins the default championship for classification and regression when
+  installed with `pip install "zerograd[kumo]"` (Python 3.11+); `kumo-tabular-medium` and `kumo-tabular-small` are
+  lighter checkpoints you run by name. Weights under OpenMDW-1.1, code Apache 2.0.
 * **Your own estimators in the championship.** `zerograd.register_estimator(name, estimator, regressor=None)` takes
   anything with `fit(X, y)` and `predict_proba(X)` (classification) or `predict(X)` (regression), from
   scikit-learn, XGBoost, LightGBM, CatBoost or your own code, and runs it next to the foundation models on the same
