@@ -117,7 +117,8 @@ class LocalZeroGrad:
         label, higher, _ = champ.METRICS[metric]
         ui.podium([(c.display, c.metrics.get(metric), c.error) for c in ranked], label,
                   cap.attribution, baseline=base.metrics.get(metric) if base else None,
-                  higher_is_better=higher, baseline_label=base_label)
+                  higher_is_better=higher, baseline_label=base_label,
+                  ties=[c.display for c in ranked if c.tied], holdout_rows=result.rows.get("holdout"))
         ui.say(f"  {ui.dim(phrase('champion'))}")
         return cap
 
@@ -353,11 +354,15 @@ class LocalCapability:
 
     @property
     def evaluation(self) -> pd.DataFrame:
-        """The championship: every model scored on the same holdout."""
+        """The championship: every model scored on the same holdout.
+
+        `ci_low` and `ci_high` are a 90% bootstrap interval of the selection metric, and `tied` marks the models
+        the holdout can't tell apart from the champion (the interval of their difference includes zero)."""
         df = pd.DataFrame(self.candidates)
         df["champion"] = df["model"] == self.champion
         metric_cols = [m for m, (_, _, tasks) in champ.METRICS.items() if self.pre.task in tasks and m in df]
-        cols = [c for c in ("display", *metric_cols, "seconds", "champion", "error") if c in df]
+        cols = [c for c in ("display", *metric_cols, "ci_low", "ci_high", "tied", "seconds", "champion", "error")
+                if c in df]
         df = df[cols].rename(columns={"display": "model"}).set_index("model")
         if "error" in df and df["error"].isna().all():
             df = df.drop(columns="error")

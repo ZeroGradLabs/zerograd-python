@@ -9,7 +9,9 @@ Same procedure as the ZeroGrad platform, so a local result and a cloud result ar
    curves the dashboard plots (confusion matrix; ROC and precision-recall for binary tasks).
 4. Champion = best value of the capability's selection metric (default ROC AUC, or RMSE for regression;
    ties: lower log loss). Regression splits and samples are stratified on quantile bins of the target.
-5. The capability keeps a fresh context drawn from *all* labeled rows, so production predictions see
+5. A paired bootstrap of the holdout gives each model a 90% interval of the metric and says which ones are
+   tied with the champion: the interval of their difference includes zero, so the holdout can't tell them apart.
+6. The capability keeps a fresh context drawn from *all* labeled rows, so production predictions see
    the most history the limit allows.
 """
 
@@ -265,10 +267,15 @@ class Candidate:
     seconds: float
     error: str | None = None
     plots: dict | None = None
+    output: np.ndarray | None = None  # holdout probabilities (or predictions); kept in memory, never saved
+    ci: tuple[float, float] | None = None  # 90% bootstrap interval of the selection metric
+    tied: bool | None = None  # within noise of the champion (None for the champion and failed models)
 
     def to_dict(self) -> dict:
         return {"model": self.model, "display": self.display, **self.metrics, "seconds": round(self.seconds, 2),
-                "error": self.error, "plots": self.plots}
+                "error": self.error, "plots": self.plots,
+                "ci_low": self.ci[0] if self.ci else None, "ci_high": self.ci[1] if self.ci else None,
+                "tied": self.tied}
 
 
 def score(metrics_: dict, metric: str) -> float | None:
@@ -335,14 +342,137 @@ def evaluate(
             if not np.all(np.isfinite(pred)):
                 raise ValueError("the model returned NaN or infinite predictions")
             return Candidate(spec.name, spec.display, regression_metrics(y_hold, pred), time.monotonic() - t0,
-                             plots=regression_plots(y_hold, pred))
+                             plots=regression_plots(y_hold, pred), output=pred)
         proba = np.vstack(parts) if parts else np.zeros((0, n_classes))
         m = metrics(y_hold, proba, n_classes)
-        return Candidate(spec.name, spec.display, m, time.monotonic() - t0, plots=plots(y_hold, proba, n_classes))
+        return Candidate(spec.name, spec.display, m, time.monotonic() - t0, plots=plots(y_hold, proba, n_classes),
+                         output=proba)
     except Exception as exc:  # one model failing must not sink the championship
         empty = (dict.fromkeys(("rmse", "mae", "r2")) if regression
                  else {"roc_auc": None, "accuracy": None, "log_loss": None})
         return Candidate(spec.name, spec.display, empty, time.monotonic() - t0, error=f"{type(exc).__name__}: {exc}")
+
+
+BOOTSTRAP_ROUNDS = 200
+NOISE_LEVEL = 0.90  # width of the intervals: a tie means the 90% interval of the difference includes zero
+
+
+def _weighted_auc(y1: np.ndarray, score_: np.ndarray) -> Callable[[np.ndarray], float | None]:
+    """ROC AUC of a binary 0/1 target with row weights (bootstrap counts), ties counted as half. Sorted once."""
+    order = np.argsort(score_, kind="mergesort")
+    s, pos = score_[order], y1[order].astype(np.float64)
+    starts = np.flatnonzero(np.r_[True, s[1:] != s[:-1]])
+
+    def auc(w: np.ndarray) -> float | None:
+        ws = w[order]
+        gp, gn = np.add.reduceat(ws * pos, starts), np.add.reduceat(ws * (1 - pos), starts)
+        P, N = gp.sum(), gn.sum()
+        if P <= 0 or N <= 0:
+            return None
+        return float(np.sum(gp * (np.cumsum(gn) - gn + 0.5 * gn)) / (P * N))
+
+    return auc
+
+
+def scorer(metric: str, y: np.ndarray, out: np.ndarray, n_classes: int,
+           task: str | None = None) -> Callable[[np.ndarray], float | None]:
+    """The metric as a function of row weights, so a bootstrap round is a weighted sum instead of a resample.
+
+    With all weights 1 it gives the value `metrics` or `regression_metrics` gives. ROC AUC falls back to accuracy
+    when a class is missing, like `score`."""
+    n = len(y)
+    if task == REGRESSION:
+        y, out = np.asarray(y, dtype=np.float64), np.asarray(out, dtype=np.float64)
+        sq, ab = (out - y) ** 2, np.abs(out - y)
+        if metric == "rmse":
+            return lambda w: float(np.sqrt(w @ sq / w.sum()))
+        if metric == "mae":
+            return lambda w: float(w @ ab / w.sum())
+        if metric == "r2":
+            def r2(w: np.ndarray) -> float | None:
+                mean = w @ y / w.sum()
+                tot = w @ (y - mean) ** 2
+                return float(1 - (w @ sq) / tot) if tot > 0 else None
+            return r2
+    else:
+        proba = _clean(out)
+        correct = (proba.argmax(axis=1) == y).astype(np.float64)
+        acc = lambda w: float(w @ correct / w.sum())  # noqa: E731
+        if metric == "accuracy":
+            return acc
+        if metric == "log_loss":
+            nll = -np.log(proba[np.arange(n), y])
+            return lambda w: float(w @ nll / w.sum())
+        pred = proba.argmax(axis=1)
+        hit = [(pred == k) & (y == k) for k in range(n_classes)]
+        is_k, said_k = [(y == k) for k in range(n_classes)], [(pred == k) for k in range(n_classes)]
+
+        def f1(w: np.ndarray, k: int) -> float:
+            tp, p_, t_ = w @ hit[k], w @ said_k[k], w @ is_k[k]
+            return float(2 * tp / (p_ + t_)) if p_ + t_ > 0 else 0.0
+
+        if metric == "balanced_accuracy":
+            def bal(w: np.ndarray) -> float:
+                rec = [(w @ hit[k]) / (w @ is_k[k]) for k in range(n_classes) if w @ is_k[k] > 0]
+                return float(np.mean(rec))
+            return bal
+        if metric == "f1_macro":
+            # like scikit-learn: only the classes that appear in the truth or the predictions count
+            return lambda w: float(np.mean([f1(w, k) for k in range(n_classes)
+                                            if w @ is_k[k] > 0 or w @ said_k[k] > 0]))
+        if n_classes == 2 and metric in ("f1", "precision", "recall"):
+            if metric == "f1":
+                return lambda w: f1(w, 1)
+            den = said_k[1] if metric == "precision" else is_k[1]
+            return lambda w: float((w @ hit[1]) / (w @ den)) if w @ den > 0 else 0.0
+        if metric == "roc_auc":
+            parts = ([_weighted_auc(y == 1, proba[:, 1])] if n_classes == 2
+                     else [_weighted_auc(y == k, proba[:, k]) for k in range(n_classes)])
+
+            def roc(w: np.ndarray) -> float | None:
+                vals = [f(w) for f in parts]
+                return acc(w) if any(v is None for v in vals) else float(np.mean(vals))
+            return roc
+
+    def slow(w: np.ndarray) -> float | None:  # any other metric: rebuild the resample and compute it in full
+        idx = np.repeat(np.arange(n), w.astype(np.int64))
+        m = regression_metrics(y[idx], out[idx]) if task == REGRESSION else metrics(y[idx], out[idx], n_classes)
+        return m.get(metric)
+    return slow
+
+
+def add_noise(candidates: list[Candidate], champion: Candidate, y_hold: np.ndarray, metric: str, n_classes: int,
+              task: str | None = None, rounds: int = BOOTSTRAP_ROUNDS, seed: int = 0) -> None:
+    """Resample the holdout (the same rows for every model) and fill each candidate's `ci` and `tied`.
+
+    `tied` compares with the champion on each resample: if the champion isn't ahead in at least 95% of them
+    (a 90% interval of the difference that includes zero), the two are within noise on this holdout."""
+    ok = [c for c in candidates if c.error is None and c.output is not None]
+    if champion not in ok or len(y_hold) < 10:
+        return
+    rng = np.random.default_rng(seed)
+    n = len(y_hold)
+    sign = 1.0 if METRICS[metric][1] else -1.0
+    fns = {id(c): scorer(metric, y_hold, c.output, n_classes, task) for c in ok}
+    vals: dict[int, list[float]] = {id(c): [] for c in ok}
+    for _ in range(rounds):
+        w = np.bincount(rng.integers(0, n, n), minlength=n).astype(np.float64)  # one resample, as row counts
+        for c in ok:
+            v = fns[id(c)](w)
+            vals[id(c)].append(np.nan if v is None else v)
+    lo, hi = (1 - NOISE_LEVEL) / 2, 1 - (1 - NOISE_LEVEL) / 2
+    best = np.asarray(vals[id(champion)])
+    for c in ok:
+        v = np.asarray(vals[id(c)])
+        keep = np.isfinite(v)
+        if keep.sum() < rounds // 2:
+            continue
+        c.ci = (round(float(np.quantile(v[keep], lo)), 6), round(float(np.quantile(v[keep], hi)), 6))
+        if c is champion:
+            continue
+        both = keep & np.isfinite(best)
+        diff = sign * (best[both] - v[both])  # > 0: the champion is ahead on that resample
+        c.tied = bool(len(diff) and np.quantile(diff, lo) <= 0)
 
 
 @dataclass
@@ -464,6 +594,7 @@ def run_championship(
             code="all_models_failed",
         )
     champion = max(candidates, key=rank_key(metric))
+    add_noise(candidates, champion, y[hold_idx], metric, n_classes, task)
     progress("select", 0.92, f"Compared {len(ok)} model{'s' if len(ok) > 1 else ''} on the same {len(hold_idx):,} holdout rows")
 
     final_idx = stratified_sample(s, max_context_rows, seed=1)

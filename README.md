@@ -69,7 +69,7 @@ from zerograd import ZeroGrad
 
 zg = ZeroGrad()                                        # local: runs on your machine
 cap = zg.create("churn", examples=history, target="churned")
-cap.evaluation                                         # every model on the same holdout; the champion is marked
+cap.evaluation                                         # every model on the same holdout, with 90% intervals and ties
 cap.predict(new_customers)                             # prediction, score and probability per class
 ```
 

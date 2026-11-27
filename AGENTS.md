@@ -44,6 +44,8 @@ Things that are easy to get wrong:
   register it with `zerograd.register_estimator("hgb", HistGradientBoostingClassifier())` and it joins the
   championship. It needs `fit` and `predict_proba` (or `predict` for regression). Unlike the foundation models it
   is trained on the context, and it must be registered again before `zerograd.load()` opens a capability it won.
+- `cap.evaluation` has a 90% bootstrap interval of the selection metric (`ci_low`, `ci_high`) and `tied` for the
+  models within noise of the champion. When the runner-up is tied, say so: either is a sound pick on this holdout.
 - In scikit-learn code, `ZeroGradClassifier` and `ZeroGradRegressor` work like any estimator. Their `fit` only
   stores the rows as context.
 - The first run of each model downloads its weights from the authors' Hugging Face repository and caches them. A GPU

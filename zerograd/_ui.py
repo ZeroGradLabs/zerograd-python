@@ -194,8 +194,11 @@ class Console:
 
     def podium(self, rows: list[tuple[str, float | None, str | None]], metric_label: str, attribution: str | None,
                baseline: float | None = None, *, higher_is_better: bool = True,
-               baseline_label: str = "majority class") -> None:
-        """rows: (display, value, error), best first. Lower-is-better metrics (RMSE) get the longest bar at the lowest."""
+               baseline_label: str = "majority class", ties: list[str] | tuple[str, ...] = (),
+               holdout_rows: int | None = None) -> None:
+        """rows: (display, value, error), best first. Lower-is-better metrics (RMSE) get the longest bar at the lowest.
+
+        `ties` are the models within noise of the champion: they get a ≈ and a note under the champion line."""
         if not self.enabled:
             return
         ok = [r for r in rows if r[2] is None and r[1] is not None]
@@ -220,7 +223,8 @@ class Console:
             width = 4 + int(round(20 * (sign * value - low) / span)) if len(ok) > 1 else 24
             bar = (self.accent if i == 0 else self.dim)("█" * width)
             label = self.bold(f"{name:<{name_w}}") if i == 0 else f"{name:<{name_w}}"
-            self.say(f"  {medal} {label}  {bar} {fmt_value(value)}")
+            tie = f" {self.dim('≈ tied')}" if name in ties else ""
+            self.say(f"  {medal} {label}  {bar} {fmt_value(value)}{tie}")
         if baseline is not None:
             label = "without a model".ljust(name_w)
             self.say("     " + self.dim(f"{label}  {fmt_value(baseline)}  ({metric_label}, {baseline_label})"))
@@ -229,6 +233,13 @@ class Console:
             self.say("")
             self.say(f"{self.accent('◆')} {self.bold('Champion:')} {champ} · {metric_label} {fmt_value(rows[0][1])}"
                      + (f" {self.dim('· ' + attribution)}" if attribution else ""))
+            if ties:
+                rows_txt = f" on {holdout_rows:,} holdout rows" if holdout_rows else " on this holdout"
+                who = ", ".join(ties)
+                note = (f"≈ Technical tie with {who}: the gap is within noise{rows_txt} (90% bootstrap interval). "
+                        "Either is a sound pick. If one is really better, more labeled rows will show it.")
+                for line in textwrap.wrap(note, 78, subsequent_indent="  "):
+                    self.say(self.dim("  " + line))
 
 
 class Spinner:

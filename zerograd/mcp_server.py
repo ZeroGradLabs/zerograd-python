@@ -433,6 +433,8 @@ def build_server(bench: Workbench | None = None):
                                 models: list[str] | None = None) -> dict:
         """Learn to predict column `target` from the labeled rows of a CSV or Parquet file. Every installed model
         is scored on the same holdout and the best one (the champion) is kept, with a leaderboard and baselines.
+        Leaderboard rows carry a 90% interval (ci_low, ci_high) and `tied` when the holdout can't tell that model
+        from the champion; tell the user about ties instead of calling the champion a clear winner.
         The capability is saved under `name` (replacing one with that name) and used by predict.
 
         drop: columns to leave out (ids, personal data, anything known only after the fact).

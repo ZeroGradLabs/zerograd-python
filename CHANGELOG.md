@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+* **Technical ties in the podium.** A paired bootstrap of the holdout gives every model a 90% interval of the
+  selection metric (`ci_low`, `ci_high` in `cap.evaluation`) and marks with `tied` the ones the holdout can't tell
+  apart from the champion. The podium shows them with "≈ tied" and a note under the champion line, so a gap of
+  0.002 AUC on 300 rows doesn't read as a win.
+
 ## 0.2.5 (2026-11-27)
 
 * **TabDPT 1.3.** The `tabdpt` extra and `install_model("tabdpt")` now require tabdpt 1.3, which loads the newer
